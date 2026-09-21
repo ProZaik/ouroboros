@@ -97,7 +97,7 @@ SETTINGS_DEFAULTS = {**UPDATE_SETTINGS_DEFAULTS,
     # Cross-model resilience CHAIN (comma-separated, ordered). A single model is a 1-element
     # chain; empty disables cross-model fallback. Resilience slot — keeps a real default,
     # unlike the worker lanes. (Renamed from the singular MODEL_FALLBACK.)
-    "OUROBOROS_MODEL_FALLBACKS": OPENROUTER_DEFAULTS["fallback"],
+    "OUROBOROS_MODEL_FALLBACKS": "agy::gemini-3.8-flash-high",
     "OUROBOROS_SERVED_MODEL_REDOS": 2,  # redos of a round another model answered (`llm_substitution.py`)
     "OUROBOROS_MODEL_DEEP_SELF_REVIEW": OPENROUTER_DEFAULTS["deep_self_review"],
     "OUROBOROS_MAX_WORKERS": 10, "OUROBOROS_PRESENCE_MAX_ACTIVE": 2,
