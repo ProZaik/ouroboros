@@ -273,7 +273,53 @@ def _normalize_dispatch_path_args(ctx: Any, name: str, args: Dict[str, Any]) -> 
 
 
 _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
-    "*": {"max_entries": "max_results", "timeout": "timeout_sec"},
+    "*": {
+        "max_entries": "max_results",
+        "timeout": "timeout_sec",
+    },
+    "run_command": {
+        "command": "cmd",
+        "command_line": "cmd",
+        "script": "cmd",
+        "shell": "cmd",
+        "args": "cmd",
+    },
+    "run_script": {
+        "code": "script",
+        "python": "script",
+        "content": "script",
+    },
+    "read_file": {
+        "file": "path",
+        "file_path": "path",
+        "filename": "path",
+    },
+    "write_file": {
+        "file": "path",
+        "file_path": "path",
+        "file_content": "content",
+        "text": "content",
+    },
+    "edit_text": {
+        "file": "path",
+        "file_path": "path",
+        "filename": "path",
+        "search": "old_str",
+        "old_string": "old_str",
+        "old_text": "old_str",
+        "replace": "new_str",
+        "new_string": "new_str",
+        "new_text": "new_str",
+    },
+    "search_code": {
+        "pattern": "query",
+        "search": "query",
+        "text": "query",
+    },
+    "web_search": {
+        "search": "query",
+        "q": "query",
+    },
 }
 
 

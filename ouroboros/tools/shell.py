@@ -271,7 +271,7 @@ def _literal_argv_notes(cmd: List[str]) -> str:
 @process_environment_tool
 def _run_shell(
     ctx: ToolContext,
-    cmd,
+    cmd = None,
     cwd: str = "",
     outputs: List[str] | None = None,
     scratch: List[str] | None = None,
@@ -284,6 +284,10 @@ def _run_shell(
     _timeout_override = timeout_sec if timeout_sec is not None else timeout
     bucket = str(kwargs.get("bucket") or "")
     skill_name = str(kwargs.get("skill_name") or "")
+    if cmd is None:
+        cmd = kwargs.pop("command", None) or kwargs.pop("cmd", None)
+    if cmd is None:
+        return "⚠️ SHELL_ARG_ERROR: cmd is required."
     if isinstance(cmd, str):
         # Shared recovery keeps run_command and verify argv semantics aligned.
         recovered = recover_stringified_argv(cmd)

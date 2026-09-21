@@ -362,8 +362,19 @@ def _extract_trailing_json(text: str, marker: str) -> tuple[str, Optional[list]]
     try:
         value, end = json.JSONDecoder().raw_decode(stripped)
     except Exception:
-        log.warning("Reflection %s JSON parse failed", marker, exc_info=True)
-        return text[:idx].rstrip(), None
+        value = None
+        end = 0
+        try:
+            import json_repair
+            repaired = json_repair.loads(stripped)
+            if isinstance(repaired, list):
+                value = repaired
+                end = len(stripped)
+        except Exception:
+            pass
+        if value is None:
+            log.warning("Reflection %s JSON parse failed", marker, exc_info=True)
+            return text[:idx].rstrip(), None
     remainder = (text[:idx] + after[lead + end:]).rstrip()
     return remainder, value if isinstance(value, list) else None
 

@@ -306,6 +306,8 @@ class _ProviderRoutingMixin:
             return f"deepseek/{resolved_model}"
         if provider == "claudexor":
             return f"claudexor::{resolved_model}"
+        if provider == "agy":
+            return f"agy/{resolved_model}"
         return f"openai-compatible/{resolved_model}"
 
     def _resolve_remote_target(
@@ -333,13 +335,31 @@ class _ProviderRoutingMixin:
                 "supports_generation_cost": False,
             }
 
-        if provider == "openai":
+        if provider == "agy":
+            base_url = (configured("AGY_BASE_URL", "") or "").strip() or "http://127.0.0.1:8317/v1"
+            api_key = (configured("AGY_API_KEY", "") or "").strip() or "sk-antigravity"
             return {
                 "provider": provider,
                 "resolved_model": resolved_model,
                 "usage_model": usage_model,
-                "api_key": configured("OPENAI_API_KEY", ""),
-                "base_url": "https://api.openai.com/v1",
+                "api_key": api_key,
+                "base_url": base_url,
+                "default_headers": {},
+                "supports_openrouter_extensions": False,
+                "supports_generation_cost": False,
+            }
+
+        if provider == "openai":
+            base_url = (configured("OPENAI_BASE_URL", "") or "").strip() or "https://api.openai.com/v1"
+            api_key = (configured("OPENAI_API_KEY", "") or "").strip()
+            if not api_key and base_url != "https://api.openai.com/v1":
+                api_key = "sk-dummy"
+            return {
+                "provider": provider,
+                "resolved_model": resolved_model,
+                "usage_model": usage_model,
+                "api_key": api_key,
+                "base_url": base_url,
                 "default_headers": {},
                 "supports_openrouter_extensions": False,
                 "supports_generation_cost": False,
