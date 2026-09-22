@@ -136,6 +136,38 @@ def enqueue_evolution_task_if_needed() -> None:
         q.send_with_budget(int(owner_chat_id), block, role="system", system_type="evolution_notice")
         return
 
+    # Cycle-start dirty-worktree preflight (charter v2 item 3; backlog
+    # ibl-e1b4f79d180f): a dirty baseline means commit_reviewed can stage
+    # nothing, so the cycle spins read-only and burns rounds. Fail fast and
+    # name the paths instead. Fail OPEN on a git error — a broken capture must
+    # not pause evolution forever.
+    try:
+        from supervisor import git_ops as _git_ops
+
+        _dirty_rc, _dirty_out, _ = _git_ops.git_capture(["git", "status", "--porcelain"])
+        _dirty_paths = (
+            [line[3:].strip() for line in _dirty_out.splitlines() if len(line) >= 4 and line[:2].strip()]
+            if _dirty_rc == 0
+            else []
+        )
+    except Exception:
+        log.debug("dirty-worktree preflight skipped: git capture unavailable", exc_info=True)
+        _dirty_paths = []
+    if _dirty_paths:
+        _sample = ", ".join(_dirty_paths[:3])
+        _more = f" (+{len(_dirty_paths) - 3} more)" if len(_dirty_paths) > 3 else ""
+        q.pause_evolution_campaign(f"dirty worktree at cycle start: {len(_dirty_paths)} path(s)")
+        q.disable_evolution_projection()
+        q.send_with_budget(
+            int(owner_chat_id),
+            f"🧬⚠️ Evolution paused: the worktree is dirty before the next cycle "
+            f"({len(_dirty_paths)} path(s): {_sample}{_more}). A cycle cannot stage a "
+            f"clean reviewed commit from a dirty baseline. Commit or stash those paths, "
+            f"then /evolve start resumes it.",
+            role="system",
+            system_type="evolution_notice",
+        )
+        return
     consecutive_failures = int(st.get("evolution_consecutive_failures") or 0)
     if consecutive_failures >= 3:
         q.pause_evolution_campaign("paused after consecutive failures")

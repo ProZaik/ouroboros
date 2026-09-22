@@ -12,7 +12,7 @@
 [![Linux](https://img.shields.io/badge/Linux-x86__64-orange.svg)](https://ouroboros-agent.ai/install/#linux)
 [![Windows](https://img.shields.io/badge/Windows-x64-blue.svg)][download-windows-x64]
 [![OuroborosHub](https://img.shields.io/badge/OuroborosHub-skills%20marketplace-8A2BE2.svg)](https://github.com/razzant/OuroborosHub)
-[![Version 7.4.7](https://img.shields.io/badge/version-7.4.7-green.svg)](VERSION)
+[![Version 7.4.8](https://img.shields.io/badge/version-7.4.8-green.svg)](VERSION)
 
 Ouroboros is an open-source, general-purpose AI agent whose identity, durable memory, and history continue across tasks and restarts. It works on external projects, coordinates a live swarm of specialist agents, and can rewrite the implementation it runs on, including its code, architecture, prompts, tools, and dependencies. Reflection can also change how it understands itself without severing that continuity.
 
@@ -66,13 +66,13 @@ The desktop packages already contain an optional CLI installer. On macOS, after 
 
 </details>
 
-[download-macos-arm64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/Ouroboros-7.4.7.dmg
-[download-windows-x64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/Ouroboros-7.4.7-windows-x64.zip
-[download-linux-deb-amd64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/ouroboros_7.4.7_amd64.deb
-[download-linux-rpm-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/ouroboros-7.4.7-1.x86_64.rpm
-[download-linux-rpm-red80-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/ouroboros-7.4.7-1.red80.x86_64.rpm
-[download-linux-appimage-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/Ouroboros-7.4.7-linux-x86_64.AppImage
-[download-linux-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.7/Ouroboros-7.4.7-linux-x86_64.tar.gz
+[download-macos-arm64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/Ouroboros-7.4.8.dmg
+[download-windows-x64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/Ouroboros-7.4.8-windows-x64.zip
+[download-linux-deb-amd64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/ouroboros_7.4.8_amd64.deb
+[download-linux-rpm-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/ouroboros-7.4.8-1.x86_64.rpm
+[download-linux-rpm-red80-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/ouroboros-7.4.8-1.red80.x86_64.rpm
+[download-linux-appimage-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/Ouroboros-7.4.8-linux-x86_64.AppImage
+[download-linux-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.8/Ouroboros-7.4.8-linux-x86_64.tar.gz
 
 Ouroboros bundles [Claudexor](https://github.com/razzant/claudexor) as its local execution layer for delegated coding and hosted-agent review. Ouroboros owns the task, memory, review, and final integration, while Claudexor runs the selected connected coding harness and returns durable execution evidence. [Explore Claudexor](https://claudexor.ai/).
 
@@ -452,6 +452,7 @@ and the reason.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 7.4.8 | 2026-09-22 | fix(evolution): preflight the worktree at cycle start — a dirty baseline pauses the campaign and notifies the owner instead of dispatching a cycle that can stage nothing |
 | 7.4.7 | 2026-09-22 | fix(context-fit): fail closed on unfit status for unconfirmed-capacity routes; the output-payload guard now raises whenever the call context fit is unfit, and on insufficient headroom only when the prepared input was measured exactly, so oversized prompts can no longer dispatch through routes whose window is unconfirmed. |
 | 7.4.6 | 2026-09-22 | **fix: disclose allowed disposition fields and initial plan submission guidance in plan_task refusals.** Error messages for `PLAN_AUTHOR_SUBJECT_INVALID` and `PLAN_REVIEW_DISPOSITION_INVALID` now explicitly name the allowed disposition fields (`review_fingerprint`, `items`, `author_disposition`, `author_action`) and guide callers on how to submit initial plans when an unrecorded review fingerprint is supplied. |
 | 7.4.5 | 2026-09-22 | **fix: safely coerce scalar tool arguments in search_code and list_files.** String numeric parameters for `max_results` and `max_entries` are safely coerced to int instead of throwing raw TypeErrors; invalid non-integer inputs return typed error messages, and string regex flags are cleanly normalized. |

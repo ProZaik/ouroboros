@@ -318,3 +318,88 @@ def test_benchmark_seed_creates_campaign_before_enabling(tmp_path):
     assert campaign["status"] == "active"
     assert campaign["id"]
     assert state["evolution_mode_enabled"] is True
+def test_cycle_start_dirty_worktree_pauses_campaign(tmp_path, monkeypatch):
+    """A dirty baseline makes commit_reviewed unable to stage anything, so the
+    cycle must refuse to open a transaction and pause with the paths named
+    (charter v2 item 3; backlog ibl-e1b4f79d180f)."""
+    from supervisor import evolution_lifecycle, git_ops, queue, state
+
+    state.init(tmp_path)
+    queue.init(tmp_path)
+    pending = []
+    queue.init_queue_refs(pending, {}, {'value': 0})
+    evolution_lifecycle.start_evolution_campaign('Improve', source='test')
+    live = state.load_state()
+    live['owner_chat_id'] = 1
+    live['evolution_mode_enabled'] = True
+    state.save_state(live)
+
+    monkeypatch.setattr(
+        git_ops,
+        'git_capture',
+        lambda cmd, **kw: (0, ' M ouroboros/llm_attempt.py\n?? scratch.txt', ''),
+    )
+
+    sent = []
+    monkeypatch.setattr(queue, 'send_with_budget', lambda *a, **k: sent.append(a))
+
+    queue.enqueue_evolution_task_if_needed()
+
+    assert pending == []
+    assert state.load_state()['evolution_mode_enabled'] is False
+    stored = evolution_lifecycle._read_evolution_campaign()
+    assert stored['status'] == 'paused'
+    assert 'dirty worktree at cycle start: 2 path(s)' in str(stored.get('pause_reason') or '')
+    assert sent and 'worktree is dirty' in sent[0][1]
+    assert '2 path(s)' in sent[0][1]
+
+
+def test_cycle_start_clean_worktree_admits(tmp_path, monkeypatch):
+    """An explicitly clean worktree must let the next cycle open its transaction."""
+    from supervisor import evolution_lifecycle, git_ops, queue, state
+
+    state.init(tmp_path)
+    queue.init(tmp_path)
+    pending = []
+    queue.init_queue_refs(pending, {}, {'value': 0})
+    evolution_lifecycle.start_evolution_campaign('Improve', source='test')
+    live = state.load_state()
+    live['owner_chat_id'] = 1
+    live['evolution_mode_enabled'] = True
+    state.save_state(live)
+
+    monkeypatch.setattr(git_ops, 'git_capture', lambda cmd, **kw: (0, '', ''))
+    monkeypatch.setattr(queue, 'send_with_budget', lambda *a, **k: None)
+
+    queue.enqueue_evolution_task_if_needed()
+
+    assert len(pending) == 1
+    assert pending[0]['type'] == 'evolution'
+    assert evolution_lifecycle._read_evolution_campaign()['status'] == 'active'
+
+
+def test_cycle_start_preflight_fails_open_on_git_error(tmp_path, monkeypatch):
+    """A broken git capture must not pause evolution forever: the preflight
+    fails OPEN and the cycle proceeds."""
+    from supervisor import evolution_lifecycle, git_ops, queue, state
+
+    state.init(tmp_path)
+    queue.init(tmp_path)
+    pending = []
+    queue.init_queue_refs(pending, {}, {'value': 0})
+    evolution_lifecycle.start_evolution_campaign('Improve', source='test')
+    live = state.load_state()
+    live['owner_chat_id'] = 1
+    live['evolution_mode_enabled'] = True
+    state.save_state(live)
+
+    def _boom(cmd, **kw):
+        raise RuntimeError('git unavailable')
+
+    monkeypatch.setattr(git_ops, 'git_capture', _boom)
+    monkeypatch.setattr(queue, 'send_with_budget', lambda *a, **k: None)
+
+    queue.enqueue_evolution_task_if_needed()
+
+    assert len(pending) == 1
+    assert evolution_lifecycle._read_evolution_campaign()['status'] == 'active'
