@@ -487,8 +487,11 @@ def _fit_output_payload(target: Dict[str, Any], payload: Dict[str, Any], api_sur
     if provider == "local" and measured["input_is_exact"]:
         facts["serving_process_id"] = target["local_input_measurement"].get("process_id")
     target["call_context_fit"] = facts
-    if fit.effective_max_tokens <= 0 or measured["input_is_exact"] and fit.fit_status in {"unfit", "insufficient_headroom"}:
-        error = PhysicalAttemptPreparationFailed("Exact prepared input does not fit the selected context allowance")
+    if fit.effective_max_tokens <= 0 or fit.fit_status == "unfit" or (measured["input_is_exact"] and fit.fit_status == "insufficient_headroom"):
+        error = PhysicalAttemptPreparationFailed(
+            "Prepared input does not fit the selected context allowance: the call context fit is unfit, "
+            "or insufficient headroom was measured on a confirmed-capacity route"
+        )
         error.call_context_fit = facts
         raise error
     result = {**payload, field: fit.effective_max_tokens}

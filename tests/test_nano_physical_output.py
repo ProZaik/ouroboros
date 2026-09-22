@@ -51,6 +51,19 @@ def test_exact_nano_insufficient_headroom_returns_preparation_facts_without_send
     assert sent == []
 
 
+def test_unfit_estimate_on_unconfirmed_capacity_fails_closed(transport, monkeypatch):
+    _, client, sent = transport
+    monkeypatch.setattr(config, "get_context_mode", lambda: "nano")
+    monkeypatch.setattr(llm_attempt, "_prepared_input_measurement", lambda *_: {
+        "input_tokens": 200000, "input_is_exact": False,
+        "tokenizer_template_provenance": {"source": "estimated"},
+        "route_capacity_tokens": 131072, "route_capacity_confirmed": False})
+    with pytest.raises(ua.PhysicalAttemptPreparationFailed) as failure:
+        client.chat([{"role": "user", "content": "estimated input"}], "openai::test-model", context_mode="nano")
+    assert failure.value.call_context_fit["fit_status"] == "unfit"
+    assert sent == []
+
+
 def test_output_rebind_preserves_the_same_canonical_tool_catalog(transport, monkeypatch):
     from ouroboros.request_wire_recovery import request_wire_call_scope
 
