@@ -886,7 +886,17 @@ def _code_search(ctx: ToolContext, query: str, path: str = ".",
     if normalized == "runtime_data" and (b := _project_store_access_block(_normalize_data_read_path(ctx, path))):
         return b
 
-    max_results = min(max(1, max_results), _MAX_SEARCH_RESULTS)
+    if isinstance(regex, str):
+        regex = regex.strip().lower() in ("true", "1", "yes")
+    else:
+        regex = bool(regex)
+
+    try:
+        max_results_int = int(max_results)
+    except (TypeError, ValueError):
+        return f"⚠️ SEARCH_ERROR: max_results must be an integer, got {max_results!r}."
+
+    max_results = min(max(1, max_results_int), _MAX_SEARCH_RESULTS)
     root_path = binding.base_path
     display_path = binding.target_path.relative_to(root_path).as_posix() if normalized in {"active_workspace", "system_repo"} else path
     display_search_path = _root_display_path(normalized, display_path)

@@ -163,6 +163,45 @@ def test_code_search_invalid_regex(tmp_path):
     assert "SEARCH_ERROR" in result
 
 
+def test_code_search_string_max_results(tmp_path):
+    """search_code coerces numeric strings for max_results instead of raising TypeError."""
+    from ouroboros.tools.core import _code_search
+    ctx = _make_ctx(tmp_path)
+    lines = "\n".join(f"match_line_{i}" for i in range(50))
+    (tmp_path / "many.py").write_text(lines, encoding="utf-8")
+    result = _code_search(ctx, "match_line", max_results="10")
+    assert "truncated at 10" in result
+
+
+def test_code_search_invalid_max_results(tmp_path):
+    """search_code returns typed SEARCH_ERROR on non-integer max_results."""
+    from ouroboros.tools.core import _code_search
+    ctx = _make_ctx(tmp_path)
+    result = _code_search(ctx, "needle", max_results="not_an_int")
+    assert "⚠️ SEARCH_ERROR: max_results must be an integer, got 'not_an_int'" in result
+
+
+def test_code_search_string_regex(tmp_path):
+    """search_code safely normalizes string regex flags."""
+    from ouroboros.tools.core import _code_search
+    ctx = _make_ctx(tmp_path)
+    _populate_repo(tmp_path)
+    result_true = _code_search(ctx, r"def \w+\(\)", regex="true")
+    assert "foo.py:1:" in result_true
+    result_false = _code_search(ctx, r"def \w+\(\)", regex="false")
+    assert "No matches found" in result_false
+
+
+def test_list_files_string_max_entries(tmp_path):
+    """list_files coerces numeric strings for max_entries instead of raising TypeError."""
+    from ouroboros.tools.core_file_tools import _list_files
+    ctx = _make_ctx(tmp_path)
+    for i in range(15):
+        (tmp_path / f"file_{i}.txt").write_text("ok", encoding="utf-8")
+    result = _list_files(ctx, path=".", max_entries="10")
+    assert "truncated at 10" in result
+
+
 # ---------------------------------------------------------------------------
 # Initial tool visibility
 # ---------------------------------------------------------------------------

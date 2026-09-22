@@ -198,6 +198,14 @@ def _coerce_line_window(start_line: Any = 1, max_lines: Any = 2000) -> tuple[int
     return start_raw, max(1, max_raw)
 
 
+def _coerce_max_entries(max_entries: Any = 500) -> int:
+    try:
+        val = int(max_entries)
+    except (TypeError, ValueError):
+        val = 500
+    return max(1, val)
+
+
 def _is_cognitive_data_path(norm: str) -> bool:
     text = str(norm or "").replace("\\", "/").lstrip("./")
     return text.startswith("memory/") or text in _MEMORY_AT_DRIVE_MEMORY
@@ -813,6 +821,7 @@ def _list_files(
     skill_name: str = "",
     _resolved_binding: ResolvedResourceBinding | None = None,
 ) -> str:
+    max_entries = _coerce_max_entries(max_entries)
     normalized, block = _access_or_block(ctx, root, "list")
     if block:
         return block
