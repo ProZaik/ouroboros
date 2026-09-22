@@ -364,7 +364,8 @@ def _handle_plan_task(ctx: ToolContext, **params) -> str:
                 ctx, "TOOL_ARG_ERROR",
                 "ERROR: PLAN_REVIEW_DISPOSITION_MIXED_ENVELOPE: disposition mode accepts "
                 "review_disposition only; a changed plan needs a new review-mode call "
-                "without review_disposition. No plan attempt was recorded. Non-empty plan fields: "
+                "without review_disposition. To submit an initial plan for review, omit review_disposition. "
+                "No plan attempt was recorded. Non-empty plan fields: "
                 + _argument_values(params, envelope_fields),
             )
         if not isinstance(raw_disposition, dict):
@@ -377,7 +378,9 @@ def _handle_plan_task(ctx: ToolContext, **params) -> str:
         return _typed_refusal(
             ctx, "TOOL_ARG_ERROR",
             "ERROR: PLAN_REVIEW_DISPOSITION_EMPTY: submit goal, plan and spec for review "
-            "mode, or a complete review_disposition as the only field. No plan attempt was recorded.",
+            "mode, or a complete review_disposition as the only field. "
+            "To submit an initial plan for review, provide goal, plan, and spec (with affected_paths=[] if no files are changed). "
+            "No plan attempt was recorded.",
         )
     request = _PlanRequest(
         goal=str(params.get("goal") or ""), plan=str(params.get("plan") or ""), spec=params.get("spec"),
@@ -984,9 +987,15 @@ def _apply_author_subject(ctx: ToolContext, disposition: dict, envelope: Optiona
     from ouroboros.review_custody import review_retry_cancelled
 
     try:
-        if set(disposition) - {"review_fingerprint", "items", "author_disposition", "author_action"}:
-            raise ValueError("unknown disposition fields: " + _argument_values(disposition,
-                sorted(set(disposition) - {"review_fingerprint", "items", "author_disposition", "author_action"})))
+        allowed_author_fields = {"review_fingerprint", "items", "author_disposition", "author_action"}
+        unknown_fields = sorted(set(disposition) - allowed_author_fields)
+        if unknown_fields:
+            raise ValueError(
+                "unknown disposition fields: "
+                + _argument_values(disposition, unknown_fields)
+                + "; allowed fields are: "
+                + ", ".join(sorted(allowed_author_fields))
+            )
         action = disposition.get("author_action", "finish")
         if action not in ("finish", "stop"):
             raise ValueError("author_action must be none, finish or stop; none uses collection mode")
@@ -999,7 +1008,11 @@ def _apply_author_subject(ctx: ToolContext, disposition: dict, envelope: Optiona
         wave = plan_review_wave(state, critic_fp)
         unavailable = (attempt.get("fingerprint") == critic_fp and attempt.get("status") in {"unavailable", "cycles_exhausted", "rail_degraded"})
         if not wave and not unavailable:
-            raise ValueError("no recorded review or unavailable outcome matches review_fingerprint")
+            raise ValueError(
+                f"no recorded review or unavailable outcome matches review_fingerprint={critic_fp!r}. "
+                "review_disposition can only reference a recorded review wave or unavailable attempt. "
+                "To submit an initial plan for review, omit review_disposition and provide goal, plan, and spec."
+            )
         if wave:
             wave = _authority_wave(root, task_id, wave)
         if disposition.get("items"):
@@ -1051,9 +1064,16 @@ def _apply_disposition(ctx: ToolContext, disposition: dict) -> str:
     def _bad(text: str) -> str:  # every refusal below is an argument-shape refusal
         return _typed_refusal(ctx, "TOOL_ARG_ERROR", text)
 
-    unknown = sorted(str(k) for k in disposition if k not in {"review_fingerprint", "items", "author_disposition"})
+    allowed = {"review_fingerprint", "items", "author_disposition"}
+    unknown = sorted(str(k) for k in disposition if k not in allowed)
     if unknown:
-        return _bad("ERROR: PLAN_REVIEW_DISPOSITION_INVALID: unknown fields: " + ", ".join(unknown))
+        return _bad(
+            "ERROR: PLAN_REVIEW_DISPOSITION_INVALID: unknown fields: "
+            + ", ".join(unknown)
+            + "; allowed fields are: "
+            + ", ".join(sorted(allowed))
+            + " (or author_action when selecting an author plan)"
+        )
     fingerprint = str(disposition.get("review_fingerprint") or "").strip()
     if not fingerprint:
         return _bad("ERROR: PLAN_REVIEW_DISPOSITION_INVALID: review_fingerprint is required")
@@ -1069,7 +1089,10 @@ def _apply_disposition(ctx: ToolContext, disposition: dict) -> str:
     if wave is None or wave.get("compact"):
         return _bad(
             "ERROR: PLAN_REVIEW_DISPOSITION_UNBINDABLE: no recorded plan-review wave holds "
-            f"fingerprint {fingerprint} (compact history is not dispositionable). No plan attempt was recorded.")
+            f"fingerprint {fingerprint!r} (compact history is not dispositionable). "
+            "review_disposition can only reference an existing review wave. "
+            "To submit an initial plan for review, omit review_disposition and provide goal, plan, and spec. "
+            "No plan attempt was recorded.")
     try:
         wave = _authority_wave(root, task_id, wave) or wave
     except (OSError, ValueError, json.JSONDecodeError) as exc:

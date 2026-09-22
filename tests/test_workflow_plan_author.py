@@ -249,3 +249,34 @@ def test_mixed_envelope_error_discloses_bounded_field_previews(harness):  # noqa
         review_disposition={"review_fingerprint": "f" * 64, "items": []})
     assert "PLAN_REVIEW_DISPOSITION_MIXED_ENVELOPE" in result and "plan=" in result
     assert "OMISSION NOTE" in result and len(result) < 1200
+
+
+def test_author_action_unknown_fields_discloses_allowed_fields(harness):  # noqa: F811
+    result = pr._handle_plan_task(harness.make_ctx(), review_disposition={
+        "review_fingerprint": "f" * 64, "author_action": "finish",
+        "unexpected_field": "val"})
+    assert "PLAN_AUTHOR_SUBJECT_INVALID" in result
+    assert "allowed fields are: author_action, author_disposition, items, review_fingerprint" in result
+
+
+def test_author_action_unrecorded_fingerprint_explains_initial_plan_submission(harness):  # noqa: F811
+    result = pr._handle_plan_task(harness.make_ctx(), review_disposition={
+        "review_fingerprint": "0" * 64, "author_action": "finish",
+        "author_disposition": {"disposition": "accepted", "rationale": "r"}})
+    assert "PLAN_AUTHOR_SUBJECT_INVALID" in result
+    assert "no recorded review or unavailable outcome matches review_fingerprint" in result
+    assert "To submit an initial plan for review, omit review_disposition and provide goal, plan, and spec" in result
+
+
+def test_disposition_unknown_fields_discloses_allowed_fields(harness):  # noqa: F811
+    result = pr._handle_plan_task(harness.make_ctx(), review_disposition={
+        "review_fingerprint": "f" * 64, "items": [], "bad_param": "x"})
+    assert "PLAN_REVIEW_DISPOSITION_INVALID" in result
+    assert "allowed fields are: author_disposition, items, review_fingerprint" in result
+
+
+def test_disposition_unbindable_explains_initial_plan_submission(harness):  # noqa: F811
+    result = pr._handle_plan_task(harness.make_ctx(), review_disposition={
+        "review_fingerprint": "f" * 64, "items": []})
+    assert "PLAN_REVIEW_DISPOSITION_UNBINDABLE" in result
+    assert "To submit an initial plan for review, omit review_disposition and provide goal, plan, and spec" in result
