@@ -46,7 +46,10 @@ def test_settings_defaults_include_phase2_keys():
     assert SETTINGS_DEFAULTS["OUROBOROS_MODEL_VISION"] == ""
     assert SETTINGS_DEFAULTS["OUROBOROS_MODEL_CONSCIOUSNESS"] == ""
     assert SETTINGS_DEFAULTS["OUROBOROS_MODEL_LIGHT"] == "openai/gpt-5.6-luna"
-    assert SETTINGS_DEFAULTS["OUROBOROS_MODEL_FALLBACKS"] == "openai/gpt-5.6-luna"
+    assert (
+        SETTINGS_DEFAULTS["OUROBOROS_MODEL_FALLBACKS"]
+        == "agy::gemini-3.8-flash-high"
+    )
     assert (
         SETTINGS_DEFAULTS["OUROBOROS_MODEL_DEEP_SELF_REVIEW"]
         == "openai/gpt-5.6-sol"

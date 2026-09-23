@@ -211,10 +211,35 @@ def _str_match_replace(
     error prefix (e.g. ``STR_REPLACE_ERROR`` / ``EDIT_TEXT_ERROR``)."""
     count = text.count(old_str)
     if count == 0:
+        hint = ""
+        lines = text.splitlines(keepends=True)
+        old_lines = [l for l in old_str.splitlines() if l.strip()]
+        if old_lines and lines:
+            target_line = old_lines[0].strip()
+            best_idx = None
+            for idx, line in enumerate(lines):
+                if target_line in line or line.strip() == target_line:
+                    best_idx = idx
+                    break
+            if best_idx is None:
+                import difflib
+                stripped_lines = [l.strip() for l in lines]
+                matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=0.6)
+                if matches:
+                    best_idx = stripped_lines.index(matches[0])
+            if best_idx is not None:
+                start_l = max(0, best_idx - 4)
+                end_l = min(len(lines), best_idx + len(old_lines) + 4)
+                context_snippet = "".join(f"{i+1:4d}| {lines[i]}" for i in range(start_l, end_l))
+                hint = (
+                    f"\nNearest candidate match near line {best_idx + 1}:\n"
+                    f"{context_snippet}"
+                    f"Check whitespace, quotes, or indentation against the context above."
+                )
         preview = text[:2000]
+        context_msg = hint if hint else f"\nFile preview (first 2000 chars):\n{preview}"
         return None, (
-            f"⚠️ {error_tag}: old_str not found in {display_path}.\n"
-            f"File preview (first 2000 chars):\n{preview}"
+            f"⚠️ {error_tag}: old_str not found in {display_path}.{context_msg}"
         )
     if count > 1:
         positions = []

@@ -78,3 +78,20 @@ def test_reflection_json_repair_fallback():
     assert parsed[0]["type"] == "pattern_write"
     assert "Unescaped" in parsed[0]["content"]
     assert "Here is my reflection" in remainder
+
+
+def test_str_match_replace_nearest_context():
+    from ouroboros.tools.core import _str_match_replace
+
+    text = "line 1\nline 2 target\nline 3\nline 4\n"
+    new_text, err = _str_match_replace(
+        text,
+        "line 2 target typo",
+        "replacement",
+        "demo.py",
+        "STR_REPLACE_ERROR"
+    )
+    assert new_text is None
+    assert "⚠️ STR_REPLACE_ERROR: old_str not found in demo.py." in err
+    assert "Nearest candidate match near line 2:" in err
+    assert "line 2 target" in err
