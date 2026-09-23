@@ -347,8 +347,8 @@ def acquire_exclusive_file_lock(
                         if field.startswith("pid=") and field[4:].isdigit():
                             owner_pid = int(field[4:])
                     stale = bool(judged) and (time.time() - judged[2] / 1e9) > stale_sec
-                    if judged and owner_aware_stale and owner_pid > 0:
-                        stale = not pid_is_alive(owner_pid)  # Proven death needs no age grace.
+                    if judged and owner_aware_stale and owner_pid > 0 and not pid_is_alive(owner_pid):
+                        stale = True  # Proven death needs no age grace.
                     # Judge and evict the same inode under a kernel hold.
                     if stale and enforced:
                         try:

@@ -690,6 +690,9 @@ def _reprepare_waiting_main(ctx: _RoundModelCallContext, kwargs: dict):
         tool_calls=len(trace.get("tool_calls") or []) if isinstance(trace, dict) else 0,
     )
     disposition = _loop()._measure_round_main_fit(ctx, automatic_pass_used=False)
+    if disposition is not None and disposition.predicted_capacity_miss and ctx.active_context_mode != "low":
+        _reproject_actual_overflow_low(ctx)
+        disposition = _loop()._measure_round_main_fit(ctx, automatic_pass_used=False)
     if disposition is not None and disposition.action == "reclaim_once":
         if _fit_key(disposition) not in _loop()._context_reclaim_passes(ctx.tools._ctx):
             with bind_physical_attempt_context(None):

@@ -449,8 +449,8 @@ def upstream_transport_reachable(llm: Any, model: str, *, timeout: float,
                         "account_fingerprint": catalog.get("accountFingerprint")}
             return {}
         target = llm._resolve_remote_target(model)
-        url = str(target.get("base_url") or "")
-        if not url or is_loopback_base_url(url):
+        url = str(target.get("base_url") if isinstance(target, dict) else getattr(target, "base_url", "") or "")
+        if not url:
             return {}
         import httpx
         # Metadata carries no cognitive in-flight lease. Reuse the ordinary
@@ -460,7 +460,7 @@ def upstream_transport_reachable(llm: Any, model: str, *, timeout: float,
             response = client.head(url)
         # An upstream HTTP refusal still proves connectivity. A gateway/server
         # outage does not. This says nothing about the old generation's outcome.
-        if 200 <= response.status_code < 500:
+        if 200 <= response.status_code < 500 or (is_loopback_base_url(url) and response.status_code < 600):
             return {"kind": "upstream_http", "status_code": response.status_code,
                     "observed_at": utc_now_iso()}
     except Exception:

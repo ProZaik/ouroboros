@@ -799,3 +799,28 @@ class TestBadgeAndArchRegexAcceptRc:
     def test_arch_header_regex_still_matches_stable(self):
         header = "# Ouroboros v4.50.0 — Three-layer refactor\n"
         assert _ARCH_HEADER_RE.search(header) is not None
+
+
+class TestReadmeVersionHistoryCarrier:
+    def test_missing_version_history_row_is_reported(self):
+        readme = (
+            "# Ouroboros\n\n"
+            "[![Version 7.5.0](https://img.shields.io/badge/version-7.5.0-green.svg)](VERSION)\n\n"
+            "## Version History\n\n"
+            "| Version | Date | Description |\n"
+            "| 7.4.10 | 2026-09-23 | previous release |\n"
+        )
+        desync = version_carrier_desyncs("7.5.0", readme_text=readme, detailed=True)
+        assert "README.md Version History (expected row for | 7.5.0 |)" in desync
+
+    def test_present_version_history_row_passes(self):
+        readme = (
+            "# Ouroboros\n\n"
+            "[![Version 7.5.0](https://img.shields.io/badge/version-7.5.0-green.svg)](VERSION)\n\n"
+            "## Version History\n\n"
+            "| Version | Date | Description |\n"
+            "| 7.5.0 | 2026-09-23 | current release |\n"
+            "| 7.4.10 | 2026-09-23 | previous release |\n"
+        )
+        desync = version_carrier_desyncs("7.5.0", readme_text=readme, detailed=True)
+        assert not any("Version History" in d for d in desync)
