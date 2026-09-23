@@ -138,6 +138,7 @@ def _handle_evolution_task_done(
         def _bump_failures(live: Dict[str, Any]) -> None:
             failures_box["n"] = int(live.get("evolution_consecutive_failures") or 0) + 1
             live["evolution_consecutive_failures"] = failures_box["n"]
+            live['evolution_last_failure_reason'] = str(((axes.get('execution') or {}).get('reason_code')) or ((axes.get('lifecycle') or {}).get('reason_code')) or ((axes.get('execution') or {}).get('status')) or 'unknown')
 
         update_state(_bump_failures)
         ctx.append_jsonl(
@@ -145,6 +146,7 @@ def _handle_evolution_task_done(
             {
                 "ts": utc_now_iso(),
                 "type": "evolution_task_failure_tracked",
+                'reason_code': str(((axes.get('execution') or {}).get('reason_code')) or ((axes.get('lifecycle') or {}).get('reason_code')) or ((axes.get('execution') or {}).get('status')) or 'unknown'),
                 "task_id": task_id,
                 "consecutive_failures": failures_box.get("n", 0),
                 "cost_usd": cost,

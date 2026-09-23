@@ -170,11 +170,11 @@ def enqueue_evolution_task_if_needed() -> None:
         return
     consecutive_failures = int(st.get("evolution_consecutive_failures") or 0)
     if consecutive_failures >= 3:
-        q.pause_evolution_campaign("paused after consecutive failures")
+        q.pause_evolution_campaign("paused after consecutive failures: " + str(st.get("evolution_last_failure_reason") or "unknown"))
         q.disable_evolution_projection()
         q.send_with_budget(
             int(owner_chat_id),
-            f"🧬⚠️ Evolution paused: {consecutive_failures} consecutive failures. "
+            f"🧬⚠️ Evolution paused: {consecutive_failures} consecutive failures ({str(st.get('evolution_last_failure_reason') or 'unknown')}). "
             f"Use /evolve start to resume after investigating the issue.",
             role="system", system_type="evolution_notice")
         return
