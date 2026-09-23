@@ -320,6 +320,23 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "search": "query",
         "q": "query",
     },
+    "terminal": {
+        "command": "cmd",
+        "command_line": "cmd",
+        "script": "cmd",
+        "shell": "cmd",
+        "args": "cmd",
+    },
+    "promote_chat_to_task": {
+        "parent_task_id": "predecessor_task_id",
+        "task_id": "predecessor_task_id",
+        "predecessor": "predecessor_task_id",
+    },
+    "route_to_project": {
+        "parent_task_id": "predecessor_task_id",
+        "task_id": "predecessor_task_id",
+        "predecessor": "predecessor_task_id",
+    },
 }
 
 
@@ -358,7 +375,7 @@ _SKILL_LIFECYCLE_TARGET_TOOLS = frozenset({
 })
 
 
-_PROCESS_TARGET_TOOLS = frozenset({"run_command", "run_script", "start_service"})
+_PROCESS_TARGET_TOOLS = frozenset({"run_command", "run_script", "start_service", "terminal"})
 
 
 _VERIFY_RUN_KINDS = frozenset({

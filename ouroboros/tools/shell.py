@@ -732,6 +732,33 @@ def get_tools() -> List[ToolEntry]:
 	                },
 	            }, "required": ["cmd"]},
         }, _run_shell, is_code_tool=True, timeout_sec=_RUN_SHELL_DEFAULT_TIMEOUT_SEC, mutates_worktree=True),
+        ToolEntry(
+            "terminal",
+            {
+                "name": "terminal",
+                "description": "Compatibility alias for run_command.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "cmd": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Argv list for command to run (alias: command).",
+                        },
+                        "cwd": {"type": "string", "default": ""},
+                        "outputs": {"type": "array", "items": {"type": "string"}},
+                        "scratch": {"type": "array", "items": {"type": "string"}},
+                        "timeout_sec": {"type": "integer"},
+                    },
+                    "required": ["cmd"],
+                },
+            },
+            _run_shell,
+            alias_for="run_command",
+            is_code_tool=True,
+            timeout_sec=_RUN_SHELL_DEFAULT_TIMEOUT_SEC,
+            mutates_worktree=True,
+        ),
         ToolEntry("run_script", {
             "name": "run_script",
             "description": (

@@ -171,7 +171,15 @@ def resolve_app_root() -> pathlib.Path:
 
 
 def resolve_repo_dir() -> pathlib.Path:
-    return pathlib.Path(os.environ.get("OUROBOROS_REPO_DIR", resolve_app_root() / "repo"))
+    if env := os.environ.get("OUROBOROS_REPO_DIR"):
+        return pathlib.Path(env)
+    app_repo = resolve_app_root() / "repo"
+    if app_repo.exists():
+        return app_repo
+    pkg_repo = pathlib.Path(__file__).resolve().parent.parent
+    if (pkg_repo / ".git").exists():
+        return pkg_repo
+    return app_repo
 
 
 def resolve_data_dir() -> pathlib.Path:

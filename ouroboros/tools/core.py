@@ -213,27 +213,61 @@ def _str_match_replace(
     if count == 0:
         hint = ""
         lines = text.splitlines(keepends=True)
-        old_lines = [l for l in old_str.splitlines() if l.strip()]
+        old_lines = [l for l in old_str.splitlines(keepends=True) if l.strip()]
         if old_lines and lines:
-            target_line = old_lines[0].strip()
+            import difflib
             best_idx = None
-            for idx, line in enumerate(lines):
-                if target_line in line or line.strip() == target_line:
-                    best_idx = idx
-                    break
+            best_ratio = 0.5
+            n_old = max(1, len(old_lines))
+            # 1. Block-level sliding window matching (handles multi-line edits robustly)
+            normalized_old = old_str.replace("\r\n", "\n")
+            matcher = difflib.SequenceMatcher(None, normalized_old, "")
+            step = 1
+            for idx in range(0, len(lines), step):
+                window = "".join(lines[idx:idx + n_old]).replace("\r\n", "\n")
+                matcher.set_seq2(window)
+                if matcher.real_quick_ratio() > best_ratio and matcher.quick_ratio() > best_ratio:
+                    ratio = matcher.ratio()
+                    if ratio > best_ratio:
+                        best_ratio = ratio
+                        best_idx = idx
+
+            # 2. Line-level fallback for distinctive target line if block match wasn't found
             if best_idx is None:
-                import difflib
                 stripped_lines = [l.strip() for l in lines]
-                matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=0.6)
-                if matches:
-                    best_idx = stripped_lines.index(matches[0])
+                candidate_queries = sorted(
+                    [(i, l.strip()) for i, l in enumerate(old_lines) if len(l.strip()) >= 3],
+                    key=lambda x: len(x[1]),
+                    reverse=True,
+                )
+                if not candidate_queries:
+                    candidate_queries = [(0, old_lines[0].strip())]
+                for old_idx, target_line in candidate_queries:
+                    for file_idx, line in enumerate(stripped_lines):
+                        if target_line in line or line == target_line:
+                            best_idx = max(0, file_idx - old_idx)
+                            break
+                    if best_idx is not None:
+                        break
+                    matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=0.6)
+                    if matches:
+                        file_idx = stripped_lines.index(matches[0])
+                        best_idx = max(0, file_idx - old_idx)
+                        break
+
             if best_idx is not None:
                 start_l = max(0, best_idx - 4)
-                end_l = min(len(lines), best_idx + len(old_lines) + 4)
-                context_snippet = "".join(f"{i+1:4d}| {lines[i]}" for i in range(start_l, end_l))
+                end_l = min(len(lines), best_idx + n_old + 4)
+                snippet_lines = []
+                for i in range(start_l, end_l):
+                    l_str = lines[i]
+                    if not l_str.endswith("\n"):
+                        l_str += "\n"
+                    snippet_lines.append(f"{i+1:4d}| {l_str}")
+                context_snippet = "".join(snippet_lines)
                 hint = (
                     f"\nNearest candidate match near line {best_idx + 1}:\n"
-                    f"{context_snippet}"
+                    f"{context_snippet}\n"
                     f"Check whitespace, quotes, or indentation against the context above."
                 )
         preview = text[:2000]

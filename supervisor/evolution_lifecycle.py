@@ -1348,22 +1348,59 @@ def _evolution_preflight_extract_paths(text: str) -> list:
 
 
 def _evolution_preflight_steer_landed(steer: str) -> bool:
-    """True when every repo path named by the steer shows no pending work at HEAD.
+    """True when the steer's objective has ALREADY landed in git history.
 
-    A steer is STALE when its named target already landed: the path is clean at
-    HEAD (no uncommitted change). Probe failures are the caller's to fail open on.
+    A steer is NOT stale merely because the working tree is clean; a clean tree
+    is the required starting condition of every cycle. A steer is stale when
+    git history at HEAD already contains the commit, version, or intent named
+    by the steer (e.g. C1 landed in v7.4.7 / d1788c2). Probe failures fail open.
     """
-    paths = _evolution_preflight_extract_paths(steer)
-    if not paths:
+    if not steer or not steer.strip():
         return False
     from supervisor import git_ops
-    for path in paths:
-        rc, out, _err = git_ops.git_capture(
-            ['git', 'status', '--porcelain', '--', path], timeout=5.0,
+    import re as _re
+
+    # 1. Check if the steer references a specific version tag already merged into HEAD (e.g. v7.4.7)
+    versions = _re.findall(r"\bv\d+\.\d+\.\d+\b", steer)
+    if versions:
+        rc, out, _ = git_ops.git_capture(["git", "tag", "--merged", "HEAD"], timeout=5.0)
+        if rc == 0:
+            merged_tags = set(out.split())
+            if all(v in merged_tags for v in versions):
+                return True
+
+    # 2. Extract first substantive line of the steer (skipping markdown headers/bullets)
+    first_substantive = ""
+    for line in steer.splitlines():
+        s = line.strip()
+        if len(s) >= 12 and not s.startswith(("#", "-", "*", ">")):
+            first_substantive = s.lower()
+            break
+    if not first_substantive and len(steer.strip()) >= 10:
+        first_substantive = steer.strip().lower()
+
+    if first_substantive:
+        # Check recent commit subjects first (last 30 commits)
+        rc, log_subjects, _ = git_ops.git_capture(
+            ["git", "log", "-n", "30", "--format=%s"], timeout=5.0
         )
-        if rc != 0 or out.strip():
-            return False
-    return True
+        if rc == 0 and log_subjects:
+            for subj in log_subjects.splitlines():
+                subj_lower = subj.strip().lower()
+                if first_substantive in subj_lower or (len(subj_lower) >= 15 and subj_lower in first_substantive):
+                    return True
+
+        # Check full commit messages if steer explicitly matches a recorded landed intent
+        rc, log_body, _ = git_ops.git_capture(
+            ["git", "log", "-n", "20", "--format=%B"], timeout=5.0
+        )
+        if rc == 0 and log_body:
+            log_lower = log_body.lower()
+            clean_steer = steer.strip().lower()
+            if len(clean_steer) >= 20 and clean_steer in log_lower:
+                return True
+
+    return False
 
 
 def _evolution_preflight_objective_busy(objective: str) -> str:

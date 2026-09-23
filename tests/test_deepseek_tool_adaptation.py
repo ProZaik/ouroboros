@@ -61,6 +61,32 @@ def test_tool_arg_aliases_for_deepseek(tmp_path):
     assert "search" not in args
     assert "replace" not in args
 
+    # 6. terminal alias
+    entry = registry._entries.get("terminal")
+    assert entry is not None
+    assert entry.alias_for == "run_command"
+    args = {"command": "git status", "timeout": 30}
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == "", f"Expected success but got {err}"
+    assert args.get("cmd") == "git status"
+    assert args.get("timeout_sec") == 30
+    assert "command" not in args
+
+    # 7. promote_chat_to_task & route_to_project
+    entry = registry._entries.get("promote_chat_to_task")
+    assert entry is not None
+    args = {"objective": "build something", "parent_task_id": "task_123"}
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == "", f"Expected success but got {err}"
+    assert args.get("predecessor_task_id") == "task_123"
+
+    entry = registry._entries.get("route_to_project")
+    assert entry is not None
+    args = {"message": "hello project", "task_id": "task_456"}
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == "", f"Expected success but got {err}"
+    assert args.get("predecessor_task_id") == "task_456"
+
 
 def test_reflection_json_repair_fallback():
     # Trailing MEMORY_ACTIONS_JSON with unescaped quotes in content
@@ -95,3 +121,47 @@ def test_str_match_replace_nearest_context():
     assert "⚠️ STR_REPLACE_ERROR: old_str not found in demo.py." in err
     assert "Nearest candidate match near line 2:" in err
     assert "line 2 target" in err
+
+
+def test_str_match_replace_multiline_generic_first_line():
+    from ouroboros.tools.core import _str_match_replace
+
+    text = """try:
+    first_try()
+except:
+    pass
+
+# ... many lines ...
+try:
+    distinctive_target_call(arg1, arg2)
+except:
+    pass
+"""
+    old_str = """try:
+    distinctive_target_call(arg1, arg2_typo)
+except:
+    pass"""
+    new_text, err = _str_match_replace(
+        text, old_str, "replacement", "demo.py", "STR_REPLACE_ERROR"
+    )
+    assert new_text is None
+    assert "⚠️ STR_REPLACE_ERROR: old_str not found in demo.py." in err
+    assert "Nearest candidate match near line 7:" in err
+    assert "distinctive_target_call" in err
+
+
+def test_str_match_replace_crlf_normalization():
+    from ouroboros.tools.core import _str_match_replace
+
+    text = "line 1\r\nline 2 target\r\nline 3\r\n"
+    new_text, err = _str_match_replace(
+        text,
+        "line 2 target typo\n",
+        "replacement",
+        "demo.py",
+        "STR_REPLACE_ERROR"
+    )
+    assert new_text is None
+    assert "Nearest candidate match near line 2:" in err
+    assert "line 2 target" in err
+

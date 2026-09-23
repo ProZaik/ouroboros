@@ -450,3 +450,51 @@ def test_target_preflight_drops_stale_steer_and_flags_busy_objective(monkeypatch
     assert objective == "some objective"
     assert steer == "some steer"
     assert note == ""
+
+
+def test_evolution_preflight_steer_landed_real(monkeypatch):
+    """Verify that _evolution_preflight_steer_landed correctly identifies
+    landed commits and does NOT drop new steers for clean files."""
+    from supervisor import evolution_lifecycle, git_ops
+
+    def fake_git_capture(args, **kwargs):
+        cmd = " ".join(args)
+        if "tag --merged" in cmd:
+            return 0, "v7.4.7\nv7.4.8\nv7.4.9\nv7.4.10", ""
+        if "log -n 30 --format=%s" in cmd:
+            return 0, "fix(context-fit): fail closed on unfit status (v7.4.7)\nfix(evolution): preflight the worktree at cycle start\nchore: cleanup", ""
+        if "log -n 20 --format=%B" in cmd:
+            return 0, "fix(context-fit): fail closed on unfit status (v7.4.7)\n\nDetailed body text.", ""
+        return 1, "", "not matched"
+
+    monkeypatch.setattr(git_ops, "git_capture", fake_git_capture)
+
+    # A brand-new steer targeting a clean file is NOT landed.
+    assert not evolution_lifecycle._evolution_preflight_steer_landed(
+        "Improve caching in ouroboros/tools/core.py"
+    )
+
+    # An empty steer is NOT landed.
+    assert not evolution_lifecycle._evolution_preflight_steer_landed("")
+
+    # A steer referencing a landed version tag (e.g. v7.4.7) IS landed.
+    assert evolution_lifecycle._evolution_preflight_steer_landed(
+        "Fix the context-fit guard (v7.4.7)"
+    )
+
+    # A steer referencing an unmerged version tag (v7.4.11) is NOT landed.
+    assert not evolution_lifecycle._evolution_preflight_steer_landed(
+        "Prepare release v7.4.11"
+    )
+
+    # A steer whose core objective already landed in recent commit subjects IS landed.
+    assert evolution_lifecycle._evolution_preflight_steer_landed(
+        "preflight the worktree at cycle start"
+    )
+
+    # A follow-up steer mentioning a past commit as context is NOT landed if its work is new.
+    assert not evolution_lifecycle._evolution_preflight_steer_landed(
+        "Add additional tests for the edge cases in commit 74b09e8"
+    )
+
+
