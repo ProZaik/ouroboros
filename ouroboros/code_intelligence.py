@@ -448,7 +448,7 @@ _TS_MAX_SYMBOLS = 4000
 def _ts_parser(grammar: str):
     """Cached tree-sitter parser for a grammar; None when the lib/grammar is absent."""
     try:
-        from tree_sitter_language_pack import get_parser
+        from ouroboros.tree_sitter_compat import get_parser
         return get_parser(grammar)  # type: ignore[arg-type]
     except Exception:
         return None

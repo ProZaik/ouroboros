@@ -116,6 +116,39 @@ class OuroborosHTTPClient:
             raise ConnectionCLIError(f"cannot stream from Ouroboros server at {self.base_url}: {exc}") from exc
 
 
+def _repl_command(args: argparse.Namespace) -> int:
+    try:
+        try:
+            from ouroboros_cli.cli import main as repl_main
+        except ImportError:
+            from ouroboros.ouroboros_cli.cli import main as repl_main
+
+        host = getattr(args, "host", "") or DEFAULT_HOST
+        port = getattr(args, "port", 0) or DEFAULT_PORT
+        url = getattr(args, "url", "")
+        if url:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(url)
+            if parsed.hostname:
+                host = parsed.hostname
+            if parsed.port:
+                port = parsed.port
+
+        cli_argv = ["--host", str(host), "--port", str(port), "repl"]
+        chat_id = getattr(args, "chat_id", None)
+        if chat_id:
+            cli_argv.extend(["--chat-id", str(chat_id)])
+        project_id = getattr(args, "project_id", None)
+        if project_id:
+            cli_argv.extend(["--project-id", str(project_id)])
+        if getattr(args, "no_markdown", False):
+            cli_argv.append("--no-markdown")
+        return int(repl_main(cli_argv))
+    except Exception as exc:
+        print(f"error starting REPL: {exc}", file=sys.stderr)
+        return 1
+
+
 def _server_command(args: argparse.Namespace) -> int:
     old_argv = sys.argv[:]
     try:
@@ -503,6 +536,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ouroboros")
     parser.add_argument("--url", default="", help="Ouroboros server URL")
     subparsers = parser.add_subparsers(dest="command")
+
+    repl_parser = subparsers.add_parser("repl", help="start interactive Hermes/Antigravity streaming REPL")
+    repl_parser.add_argument("--host", default="", help="daemon host (default: 127.0.0.1)")
+    repl_parser.add_argument("--port", type=int, default=0, help="daemon port (default: 8765)")
+    repl_parser.add_argument("--chat-id", default="", help="chat thread id (default: 1)")
+    repl_parser.add_argument("--project-id", default="", help="project scope id")
+    repl_parser.add_argument("--no-markdown", action="store_true", help="disable rich markdown formatting")
+    repl_parser.set_defaults(func=_repl_command)
 
     server_parser = subparsers.add_parser("server", help="run the Ouroboros web server")
     server_parser.add_argument("--host", default="", help="host/interface to bind")
@@ -1031,6 +1072,10 @@ def _print_json(data: Any) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw = sys.argv[1:] if argv is None else list(argv)
+    if not raw and sys.stdin.isatty():
+        return _repl_command(argparse.Namespace())
+
     parser = build_parser()
     args = parser.parse_args(argv)
     if not hasattr(args, "func"):

@@ -27,7 +27,7 @@ def _markdown_parser(grammar: str, source_path: str) -> Any:
     already caches imported grammar bindings; no shared mutable parser is needed.
     """
     try:
-        from tree_sitter_language_pack import get_parser
+        from ouroboros.tree_sitter_compat import get_parser
 
         return get_parser(grammar)
     except Exception as exc:

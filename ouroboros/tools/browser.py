@@ -756,7 +756,7 @@ def _evaluate_source(expression: str) -> str:
     expression; a failed evaluation is never replayed to try another form.
     """
     try:
-        from tree_sitter_language_pack import get_parser
+        from ouroboros.tree_sitter_compat import get_parser
 
         tree = get_parser("javascript").parse(expression.encode("utf-8"))
         pending = [tree.root_node]
