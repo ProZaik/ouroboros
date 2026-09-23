@@ -403,3 +403,50 @@ def test_cycle_start_preflight_fails_open_on_git_error(tmp_path, monkeypatch):
 
     assert len(pending) == 1
     assert evolution_lifecycle._read_evolution_campaign()['status'] == 'active'
+def test_target_preflight_drops_stale_steer_and_flags_busy_objective(monkeypatch):
+    """The brief builder must not re-mint a landed steer (#21-#24) nor name a
+    target a RUNNING task already holds (#18-#20). Every probe failure fails
+    OPEN: a broken preflight must never freeze evolution."""
+    from supervisor import evolution_lifecycle, queue
+
+    # A steer naming a path already clean at HEAD is STALE -> dropped.
+    monkeypatch.setattr(
+        evolution_lifecycle, "_evolution_preflight_steer_landed", lambda steer: True
+    )
+    monkeypatch.setattr(queue, "RUNNING", {})
+
+    objective, steer, note = evolution_lifecycle._evolution_target_preflight(
+        "Improve something in ouroboros/config.py",
+        "Fix ouroboros/llm_attempt.py::_fit_output_payload",
+    )
+    assert steer == ""
+    assert "STALE" in note
+    assert "llm_attempt.py" not in objective
+
+    # An objective naming a path held by a RUNNING task is flagged and the
+    # objective is annotated so the cycle picks a different target or a no-op.
+    monkeypatch.setattr(
+        evolution_lifecycle, "_evolution_preflight_steer_landed", lambda steer: False
+    )
+    monkeypatch.setattr(
+        queue,
+        "RUNNING",
+        {"t1": {"affected_paths": ["ouroboros/config.py"], "objective": "x"}},
+    )
+    objective, steer, note = evolution_lifecycle._evolution_target_preflight(
+        "Improve ouroboros/config.py", ""
+    )
+    assert "config.py" in note
+    assert "PREFLIGHT" in objective
+
+    # Any probe error leaves the inputs untouched with an empty note.
+    def _boom(*_a, **_k):
+        raise RuntimeError("probe down")
+
+    monkeypatch.setattr(evolution_lifecycle, "_evolution_preflight_objective_busy", _boom)
+    objective, steer, note = evolution_lifecycle._evolution_target_preflight(
+        "some objective", "some steer"
+    )
+    assert objective == "some objective"
+    assert steer == "some steer"
+    assert note == ""

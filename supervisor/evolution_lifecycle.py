@@ -1336,6 +1336,95 @@ def update_evolution_campaign_after_task(
     }
 
 
+def _evolution_preflight_extract_paths(text: str) -> list:
+    """Extract repo-relative path-like tokens named by objective/steer text."""
+    import re as _re
+    return sorted({
+        m.group(0) for m in _re.finditer(
+            r'[A-Za-z0-9_./-]+\.(?:py|md|js|json|toml|lock|html|ts|css|yaml|yml)',
+            text or '',
+        )
+    })
+
+
+def _evolution_preflight_steer_landed(steer: str) -> bool:
+    """True when every repo path named by the steer shows no pending work at HEAD.
+
+    A steer is STALE when its named target already landed: the path is clean at
+    HEAD (no uncommitted change). Probe failures are the caller's to fail open on.
+    """
+    paths = _evolution_preflight_extract_paths(steer)
+    if not paths:
+        return False
+    from supervisor import git_ops
+    for path in paths:
+        rc, out, _err = git_ops.git_capture(
+            ['git', 'status', '--porcelain', '--', path], timeout=5.0,
+        )
+        if rc != 0 or out.strip():
+            return False
+    return True
+
+
+def _evolution_preflight_objective_busy(objective: str) -> str:
+    """Return the busy path when a RUNNING task holds a path named by the objective.
+
+    Reads the supervisor's own queue state (supervisor.queue.RUNNING) — the same
+    state enqueue_evolution_task_if_needed reads — never any agent peek_task tool.
+    """
+    paths = _evolution_preflight_extract_paths(objective)
+    if not paths:
+        return ''
+    from supervisor import queue as _queue
+    running = getattr(_queue, 'RUNNING', None) or {}
+    for task in list(running.values()):
+        if not isinstance(task, dict):
+            continue
+        declared = task.get('affected_paths') or task.get('scope_paths') or []
+        if isinstance(declared, str):
+            declared = [declared]
+        for d in declared:
+            d = str(d).strip()
+            if d and d in paths:
+                return d
+        blob = str(task.get('objective') or '') + ' ' + str(task.get('text') or '')
+        for p in paths:
+            if p and p in blob:
+                return p
+    return ''
+
+
+def _evolution_target_preflight(objective: str, steer: str) -> tuple:
+    """Validate objective/steer against CURRENT repo state before brief emission.
+
+    Returns (objective, steer, note). Fails OPEN: any probe error leaves the
+    inputs unchanged with an empty note, exactly like the v7.4.8 dirty-worktree
+    preflight — a broken probe must never freeze evolution.
+    """
+    try:
+        note_parts = []
+        busy = _evolution_preflight_objective_busy(objective)
+        if busy:
+            note_parts.append(
+                f'Objective target `{busy}` is held by a RUNNING task; '
+                'this cycle must not touch it.'
+            )
+            objective = (
+                f'{objective}\n\n[PREFLIGHT: target `{busy}` is held by a running '
+                'task — pick a different target or an honest no-op.]'
+            )
+        if steer and _evolution_preflight_steer_landed(steer):
+            note_parts.append(
+                'Owner Standing Steer named a target already landed at HEAD; '
+                'steer dropped as STALE.'
+            )
+            steer = ''
+        return objective, steer, '\n'.join(note_parts)
+    except Exception:
+        log.debug('evolution target preflight failed; failing open', exc_info=True)
+        return objective, steer, ''
+
+
 def build_evolution_task_text(cycle: int) -> str:
     """Build the next evolution-campaign task prompt."""
     from ouroboros.config import get_evolution_persistent_objective
@@ -1343,13 +1432,17 @@ def build_evolution_task_text(cycle: int) -> str:
     campaign = _read_evolution_campaign()
     if campaign.get("status") != "active":
         return f"EVOLUTION #{cycle}"
+    objective = str(campaign.get("objective") or "Autonomously improve Ouroboros.")
+    steer = get_evolution_persistent_objective()
+    objective, steer, preflight_note = _evolution_target_preflight(objective, steer)
     parts = [
         f"EVOLUTION CAMPAIGN {campaign.get('id') or 'active'} — CYCLE #{cycle}",
         "",
         "## Objective",
-        str(campaign.get("objective") or "Autonomously improve Ouroboros."),
+        objective,
     ]
-    steer = get_evolution_persistent_objective()
+    if preflight_note:
+        parts.extend(["", f"## Target Preflight\n{preflight_note}"])
     if steer:
         parts.extend([
             "",
