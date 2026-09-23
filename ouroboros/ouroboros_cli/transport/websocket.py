@@ -16,6 +16,19 @@ log = logging.getLogger(__name__)
 Listener = Callable[[Dict[str, Any]], Coroutine[Any, Any, None]] | Callable[[Dict[str, Any]], None]
 
 
+
+def _is_ws_open(ws: Any) -> bool:
+    if ws is None:
+        return False
+    if hasattr(ws, "closed"):
+        return not ws.closed
+    try:
+        from websockets.protocol import State
+        return getattr(ws, "state", None) == State.OPEN
+    except Exception:
+        return True
+
+
 class OuroborosWSClient:
     """Async WebSocket client supporting reconnection, heartbeat watchdog, and typed event dispatch."""
 
@@ -39,7 +52,8 @@ class OuroborosWSClient:
 
     @property
     def is_connected(self) -> bool:
-        return self._connected and self._ws is not None and not self._ws.closed
+        return self._connected and self._ws is not None and _is_ws_open(self._ws)
+
 
     def on(self, event_type: str, handler: Listener) -> Callable[[], None]:
         """Register an event listener. Returns a disposer function."""
@@ -140,7 +154,7 @@ class OuroborosWSClient:
             await self._dispatch(msg_type, msg)
 
     async def _sender_loop(self, ws: websockets.WebSocketClientProtocol) -> None:
-        while self._running and not ws.closed:
+        while self._running and _is_ws_open(ws):
             try:
                 msg = await self._outbound_queue.get()
                 payload = json.dumps(msg, ensure_ascii=False)
