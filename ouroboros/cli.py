@@ -930,13 +930,26 @@ def _render_event_for_stderr(event: Dict[str, Any]) -> str:
     data = event.get("data") if isinstance(event.get("data"), dict) else {}
     etype = str(event.get("type") or "")
     if etype == "progress":
-        return str(data.get("content") or data.get("text") or "").strip()
+        raw = str(data.get("content") or data.get("text") or "").strip()
+        if not raw:
+            return ""
+        import re
+        raw = re.sub(r"<[｜|]DSML[｜|]invoke\s+name=[\"']([^\"']+)[\"'][^>]*>", r"[⚙ \1] ", raw)
+        raw = re.sub(r"</?[｜|]DSML[｜|][^>]*>", "", raw)
+        raw = re.sub(r"<[｜|][^｜|>]+[｜|]>", "", raw)
+        raw = re.sub(r"<tool_result>.*?</tool_result>", "", raw, flags=re.DOTALL)
+        return raw.strip()
     if etype == "tool_call":
-        return f"tool: {data.get('tool', '?')}"
+        tool_name = data.get("tool", "?")
+        args = data.get("arguments") or data.get("args") or ""
+        if isinstance(args, dict):
+            args_str = ", ".join(f"{k}={str(v)[:30]}" for k, v in list(args.items())[:3])
+            return f"⚙ tool: {tool_name}({args_str})"
+        return f"⚙ tool: {tool_name}"
     if etype in {"task_done", "task_metrics"}:
-        return f"{etype}: {data.get('task_id', '')}"
+        return f"✓ {etype}: {data.get('task_id', '')}"
     if etype in {"cursor_replay", "history_gap"}:
-        return f"{etype}: {event.get('reason', '')}"
+        return f"⚠ {etype}: {event.get('reason', '')}"
     return ""
 
 

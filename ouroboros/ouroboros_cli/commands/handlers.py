@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import sys
 from typing import TYPE_CHECKING, List, Optional
 
@@ -24,25 +25,35 @@ if TYPE_CHECKING:
 def handle_help(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
     """Show help menu with available commands and hotkeys."""
     lines = [
-        colorize("█▀ OUROBOROS INTERACTIVE CLI & REPL", Colors.BRIGHT_CYAN, bold=True),
+        colorize("=== OUROBOROS INTERACTIVE CLI & REPL ===", Colors.BRIGHT_CYAN, bold=True),
         colorize("Type a message to chat directly with Ouroboros, or use slash commands:", Colors.WHITE),
         "",
-        f"  {colorize('/status', Colors.BRIGHT_YELLOW, bold=True):<20} Inspect daemon health, mode, worker count, and budget",
-        f"  {colorize('/tasks [all|run]', Colors.BRIGHT_YELLOW, bold=True):<20} List active tasks or filter (all/running/completed/failed)",
-        f"  {colorize('/task <id>', Colors.BRIGHT_YELLOW, bold=True):<20} Show detailed information for a specific task",
-        f"  {colorize('/projects', Colors.BRIGHT_YELLOW, bold=True):<20} List configured projects and their chat threads",
-        f"  {colorize('/project <id>', Colors.BRIGHT_YELLOW, bold=True):<20} Switch current project context and chat thread",
-        f"  {colorize('/cancel [id]', Colors.BRIGHT_YELLOW, bold=True):<20} Cancel a running task (defaults to current task)",
-        f"  {colorize('/hurry [id]', Colors.BRIGHT_YELLOW, bold=True):<20} Accelerate execution of active task",
-        f"  {colorize('/decision <opt>', Colors.BRIGHT_YELLOW, bold=True):<20} Answer pending quiz (number 1..N or text)",
-        f"  {colorize('/mode [name]', Colors.BRIGHT_YELLOW, bold=True):<20} View or set runtime mode (e.g. standard, cyber_pro)",
-        f"  {colorize('/model [name]', Colors.BRIGHT_YELLOW, bold=True):<20} View or switch active model from catalog",
-        f"  {colorize('/history [n]', Colors.BRIGHT_YELLOW, bold=True):<20} View recent conversation history (default 10)",
-        f"  {colorize('/logs [name]', Colors.BRIGHT_YELLOW, bold=True):<20} Tail runtime logs (progress, events, tools, supervisor)",
-        f"  {colorize('/health', Colors.BRIGHT_YELLOW, bold=True):<20} Check health of Ouroboros API, host service & DeepSeek bridge",
-        f"  {colorize('/session', Colors.BRIGHT_YELLOW, bold=True):<20} Display active session details and chat thread state",
-        f"  {colorize('/clear', Colors.BRIGHT_YELLOW, bold=True):<20} Clear terminal screen",
-        f"  {colorize('/quit, /exit', Colors.BRIGHT_YELLOW, bold=True):<20} Exit the REPL",
+        colorize("Core Commands:", Colors.BRIGHT_WHITE, bold=True),
+        f"  {colorize('/status', Colors.BRIGHT_YELLOW, bold=True):<24} Inspect daemon health, mode, worker count, and budget",
+        f"  {colorize('/tasks [all|run]', Colors.BRIGHT_YELLOW, bold=True):<24} List active tasks or filter (all/running/completed/failed)",
+        f"  {colorize('/task <id>', Colors.BRIGHT_YELLOW, bold=True):<24} Show detailed information for a specific task",
+        f"  {colorize('/cancel, /abort', Colors.BRIGHT_YELLOW, bold=True):<24} Cancel a running task (defaults to current task)",
+        f"  {colorize('/hurry [id]', Colors.BRIGHT_YELLOW, bold=True):<24} Accelerate execution of active task",
+        f"  {colorize('/decision <opt>', Colors.BRIGHT_YELLOW, bold=True):<24} Answer pending decision (number 1..N or text)",
+        "",
+        colorize("Autonomous Evolution & Memory (Hermes/Antigravity style):", Colors.BRIGHT_WHITE, bold=True),
+        f"  {colorize('/evolve [status|pause|resume|cycle]', Colors.BRIGHT_YELLOW, bold=True):<24} Inspect or control self-evolution campaign",
+        f"  {colorize('/memory', Colors.BRIGHT_YELLOW, bold=True):<24} View active working memory and scratchpad",
+        f"  {colorize('/diff', Colors.BRIGHT_YELLOW, bold=True):<24} View git status and uncommitted changes",
+        f"  {colorize('/review', Colors.BRIGHT_YELLOW, bold=True):<24} Request deep constitutional self-review",
+        f"  {colorize('/compact', Colors.BRIGHT_YELLOW, bold=True):<24} Trigger memory consolidation & compaction",
+        "",
+        colorize("Model & Runtime Control:", Colors.BRIGHT_WHITE, bold=True),
+        f"  {colorize('/models', Colors.BRIGHT_YELLOW, bold=True):<24} View specialized model roles (main, light, consciousness, search)",
+        f"  {colorize('/model [name]', Colors.BRIGHT_YELLOW, bold=True):<24} Switch active model from catalog",
+        f"  {colorize('/mode [name]', Colors.BRIGHT_YELLOW, bold=True):<24} View or set runtime mode (e.g. standard, cyber_pro)",
+        f"  {colorize('/projects', Colors.BRIGHT_YELLOW, bold=True):<24} List configured projects and chat threads",
+        f"  {colorize('/history [n]', Colors.BRIGHT_YELLOW, bold=True):<24} View recent conversation history",
+        f"  {colorize('/logs [name]', Colors.BRIGHT_YELLOW, bold=True):<24} Tail runtime logs",
+        f"  {colorize('/health', Colors.BRIGHT_YELLOW, bold=True):<24} Check health of API, host service & DeepSeek bridge",
+        f"  {colorize('/session', Colors.BRIGHT_YELLOW, bold=True):<24} Display active session details",
+        f"  {colorize('/clear', Colors.BRIGHT_YELLOW, bold=True):<24} Clear terminal screen",
+        f"  {colorize('/quit, /exit', Colors.BRIGHT_YELLOW, bold=True):<24} Exit the REPL",
         "",
         colorize("Hotkeys:", Colors.GRAY, bold=True),
         f"  {colorize('Ctrl+C', Colors.GRAY)}: Cancel current input or task",
@@ -356,7 +367,7 @@ def handle_health(args: List[str], state: SessionState, http_client: OuroborosHT
     """Check health of Ouroboros API, host service, DeepSeek bridge, and system environment."""
     import socket
     lines = [
-        colorize("█▀ OUROBOROS SYSTEM HEALTH & SERVICE AUDIT", Colors.BRIGHT_CYAN, bold=True),
+        colorize("=== OUROBOROS SYSTEM HEALTH & SERVICE AUDIT ===", Colors.BRIGHT_CYAN, bold=True),
         "",
     ]
 
@@ -395,7 +406,7 @@ def handle_health(args: List[str], state: SessionState, http_client: OuroborosHT
 def handle_session(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
     """Display active session details and chat thread state."""
     lines = [
-        colorize("█▀ REPL SESSION STATE", Colors.BRIGHT_CYAN, bold=True),
+        colorize("=== REPL SESSION STATE ===", Colors.BRIGHT_CYAN, bold=True),
         f"  Chat Thread ID:     {colorize(str(state.chat_id), Colors.BRIGHT_GREEN)}",
         f"  Project ID:         {colorize(str(state.project_id or '(global root)'), Colors.BRIGHT_YELLOW)}",
         f"  WebSocket Status:   {colorize('CONNECTED' if state.connected else 'DISCONNECTED', Colors.BRIGHT_GREEN if state.connected else Colors.BRIGHT_RED)}",
@@ -404,4 +415,168 @@ def handle_session(args: List[str], state: SessionState, http_client: OuroborosH
     if state.active_task_id:
         lines.append(f"  Active Task ID:     {colorize(state.active_task_id, Colors.BRIGHT_MAGENTA)}")
     return "\n".join(lines)
+
+
+def handle_evolve(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
+    """Inspect or control autonomous self-evolution campaign."""
+    action = args[0].strip().lower() if args else "status"
+
+    if action in ("pause", "off", "stop"):
+        try:
+            http_client.command_send("/evolve off")
+            return colorize("✓ Self-evolution campaign paused.", Colors.BRIGHT_YELLOW, bold=True)
+        except Exception as exc:
+            return colorize(f"Error pausing evolution: {exc}", Colors.BRIGHT_RED)
+
+    if action in ("resume", "on", "start"):
+        try:
+            http_client.command_send("/evolve on")
+            return colorize("✓ Self-evolution campaign resumed.", Colors.BRIGHT_GREEN, bold=True)
+        except Exception as exc:
+            return colorize(f"Error resuming evolution: {exc}", Colors.BRIGHT_RED)
+
+    if action in ("cycle", "next"):
+        try:
+            http_client.command_send("/evolve cycle")
+            return colorize("✓ Triggered next evolution cycle.", Colors.BRIGHT_CYAN, bold=True)
+        except Exception as exc:
+            return colorize(f"Error triggering evolution cycle: {exc}", Colors.BRIGHT_RED)
+
+    # status
+    try:
+        camp_path = pathlib.Path(os.environ.get("OUROBOROS_DATA_DIR", pathlib.Path.home() / "Ouroboros" / "data")) / "state" / "evolution_campaign.json"
+        camp_data = {}
+        if camp_path.exists():
+            import json
+            camp_data = json.loads(camp_path.read_text(encoding="utf-8"))
+
+        status = camp_data.get("status") or "unknown"
+        stat_color = Colors.BRIGHT_GREEN if status == "active" else Colors.BRIGHT_YELLOW
+        objective = camp_data.get("objective") or "No active objective"
+        active_task = camp_data.get("active_task_id") or "None"
+        cycles = camp_data.get("cycle_count") or 0
+
+        lines = [
+            colorize("=== OUROBOROS SELF-EVOLUTION CAMPAIGN ===", Colors.BRIGHT_CYAN, bold=True),
+            f"  Status:          {colorize(status.upper(), stat_color, bold=True)}",
+            f"  Active Task:     {colorize(str(active_task), Colors.BRIGHT_YELLOW)}",
+            f"  Current Cycles:  {colorize(str(cycles), Colors.WHITE)}",
+            f"  Active Target:   {colorize(str(objective), Colors.BRIGHT_WHITE)}",
+            "",
+            colorize("Actions: /evolve pause | /evolve resume | /evolve cycle", Colors.GRAY),
+        ]
+        return "\n".join(lines)
+    except Exception as exc:
+        return colorize(f"Error reading evolution status: {exc}", Colors.BRIGHT_RED)
+
+
+def handle_models(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
+    """Show specialized model routing table and roles."""
+    try:
+        settings = http_client.settings_get()
+        lines = [
+            colorize("=== OUROBOROS MODEL ROLE SPECIALIZATION ===", Colors.BRIGHT_CYAN, bold=True),
+            f"  Main / Coding (R1):    {colorize(str(settings.get('OUROBOROS_MODEL', '-')), Colors.BRIGHT_GREEN, bold=True)}",
+            f"  Consciousness (V3):    {colorize(str(settings.get('OUROBOROS_MODEL_CONSCIOUSNESS', '-')), Colors.BRIGHT_CYAN)}",
+            f"  Light / Memory (V3):   {colorize(str(settings.get('OUROBOROS_MODEL_LIGHT', '-')), Colors.BRIGHT_CYAN)}",
+            f"  Deep Self-Review:      {colorize(str(settings.get('OUROBOROS_MODEL_DEEP_SELF_REVIEW', '-')), Colors.BRIGHT_YELLOW)}",
+            f"  Vision (VLM):          {colorize(str(settings.get('OUROBOROS_MODEL_VISION', '-')), Colors.BRIGHT_MAGENTA)}",
+            f"  Web Search:            {colorize(str(settings.get('OUROBOROS_WEBSEARCH_MODEL', '-')), Colors.BRIGHT_BLUE)}",
+            f"  Fallback Lane:         {colorize(str(settings.get('OUROBOROS_MODEL_FALLBACKS', '-')), Colors.GRAY)}",
+            "",
+            colorize("Context Windows:", Colors.WHITE, bold=True),
+            f"  All Active Roles:      {colorize('500,000 tokens', Colors.BRIGHT_WHITE)}",
+            colorize("Upstream Provider:", Colors.WHITE, bold=True),
+            f"  DeepSeek Bridge:       {colorize('http://127.0.0.1:8318 (Native Mobile API + Multi-Account)', Colors.GRAY)}",
+        ]
+        return "\n".join(lines)
+    except Exception as exc:
+        return colorize(f"Error reading model roles: {exc}", Colors.BRIGHT_RED)
+
+
+def handle_memory(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
+    """View active working memory, scratchpad, and steering directives."""
+    try:
+        scratch_path = pathlib.Path(os.environ.get("OUROBOROS_DATA_DIR", pathlib.Path.home() / "Ouroboros" / "data")) / "memory" / "scratchpad.md"
+        if not scratch_path.exists():
+            return colorize("Scratchpad memory file not found.", Colors.GRAY)
+
+        text = scratch_path.read_text(encoding="utf-8").strip()
+        lines = [
+            colorize("=== OUROBOROS WORKING MEMORY (SCRATCHPAD) ===", Colors.BRIGHT_CYAN, bold=True),
+            "",
+        ]
+        spl = text.split("\n")
+        for l in spl[:30]:
+            lines.append(f"  {l}")
+        if len(spl) > 30:
+            lines.append(colorize(f"  ... [+{len(spl) - 30} more lines in scratchpad.md]", Colors.GRAY))
+        return "\n".join(lines)
+    except Exception as exc:
+        return colorize(f"Error reading working memory: {exc}", Colors.BRIGHT_RED)
+
+
+def handle_diff(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
+    """Inspect repository git status and uncommitted changes."""
+    import subprocess
+    try:
+        repo_dir = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+        status_proc = subprocess.run(
+            ["git", "-C", str(repo_dir), "status", "--short"],
+            capture_output=True, text=True, timeout=5.0
+        )
+        diff_proc = subprocess.run(
+            ["git", "-C", str(repo_dir), "diff", "--stat"],
+            capture_output=True, text=True, timeout=5.0
+        )
+        branch_proc = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5.0
+        )
+        sha_proc = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5.0
+        )
+
+        branch = branch_proc.stdout.strip() or "ouroboros"
+        sha = sha_proc.stdout.strip() or ""
+        status_out = status_proc.stdout.strip()
+        diff_out = diff_proc.stdout.strip()
+
+        lines = [
+            colorize(f"=== GIT WORKTREE STATUS: {branch} ({sha}) ===", Colors.BRIGHT_CYAN, bold=True),
+        ]
+        if not status_out and not diff_out:
+            lines.append(colorize("✓ Working tree clean. No uncommitted modifications.", Colors.BRIGHT_GREEN, bold=True))
+        else:
+            if status_out:
+                lines.append(colorize("Modified & Untracked Files:", Colors.BRIGHT_YELLOW, bold=True))
+                for line in status_out.split("\n"):
+                    lines.append(f"  {line}")
+            if diff_out:
+                lines.append("")
+                lines.append(colorize("Diff Summary:", Colors.WHITE, bold=True))
+                for line in diff_out.split("\n"):
+                    lines.append(f"  {line}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return colorize(f"Error checking git diff: {exc}", Colors.BRIGHT_RED)
+
+
+def handle_review(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
+    """Trigger deep constitutional self-review."""
+    try:
+        http_client.command_send("/review")
+        return colorize("✓ Deep constitutional self-review requested. Progress will stream to chat.", Colors.BRIGHT_GREEN, bold=True)
+    except Exception as exc:
+        return colorize(f"Error requesting review: {exc}", Colors.BRIGHT_RED)
+
+
+def handle_compact(args: List[str], state: SessionState, http_client: OuroborosHTTPClient, ws_client: Optional[OuroborosWSClient]) -> str:
+    """Trigger transcript compaction and memory consolidation."""
+    try:
+        http_client.command_send("/compact")
+        return colorize("✓ Memory compaction and transcript consolidation requested.", Colors.BRIGHT_GREEN, bold=True)
+    except Exception as exc:
+        return colorize(f"Error requesting compaction: {exc}", Colors.BRIGHT_RED)
 

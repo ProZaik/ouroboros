@@ -145,11 +145,11 @@ def render_markdown(text: str) -> str:
                 highlighted = _highlight_code(code_content, code_block_lang)
                 # Box wrapper
                 header_title = f" [{code_block_lang or 'code'}] "
-                top_border = "╭──" + header_title + "─" * max(0, width - len(header_title) - 5) + "╮"
+                top_border = "┌──" + header_title + "─" * max(0, width - len(header_title) - 5) + "┐"
                 output.append(colorize(top_border, Colors.GRAY))
                 for c_line in highlighted.split("\n"):
                     output.append(f"{colorize('│', Colors.GRAY)} {c_line}")
-                bot_border = "╰" + "─" * (width - 2) + "╯"
+                bot_border = "└" + "─" * (width - 2) + "┘"
                 output.append(colorize(bot_border, Colors.GRAY))
                 code_block_lines = []
                 code_block_lang = ""
@@ -185,11 +185,10 @@ def render_markdown(text: str) -> str:
                 h_text = match.group(2)
                 if level == 1:
                     output.append("")
-                    output.append(colorize(f"█▀ {h_text.upper()}", Colors.BRIGHT_CYAN, bold=True))
-                    output.append(colorize("▀" * min(width, len(h_text) + 4), Colors.CYAN))
+                    output.append(colorize(f"=== {h_text.upper()} ===", Colors.BRIGHT_CYAN, bold=True))
                 elif level == 2:
                     output.append("")
-                    output.append(colorize(f"## {h_text}", Colors.BRIGHT_MAGENTA, bold=True))
+                    output.append(colorize(f"── {h_text} ──", Colors.BRIGHT_MAGENTA, bold=True))
                 else:
                     output.append(colorize(f"{'#' * level} {h_text}", Colors.BRIGHT_YELLOW, bold=True))
                 continue

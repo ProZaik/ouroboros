@@ -7,15 +7,21 @@ from typing import Callable, Dict, List, Optional, Tuple
 from ouroboros_cli.commands.handlers import (
     handle_cancel,
     handle_clear,
+    handle_compact,
     handle_decision,
+    handle_diff,
+    handle_evolve,
     handle_health,
     handle_help,
     handle_history,
     handle_hurry,
     handle_logs,
+    handle_memory,
     handle_mode,
     handle_model,
+    handle_models,
     handle_projects,
+    handle_review,
     handle_session,
     handle_status,
     handle_task,
@@ -50,10 +56,19 @@ class CommandDispatcher:
         self.register("/projects", handle_projects)
         self.register("/project", handle_projects)
         self.register("/cancel", handle_cancel)
+        self.register("/abort", handle_cancel)
         self.register("/hurry", handle_hurry)
         self.register("/decision", handle_decision)
         self.register("/mode", handle_mode)
         self.register("/model", handle_model)
+        self.register("/models", handle_models)
+        self.register("/evolve", handle_evolve)
+        self.register("/campaign", handle_evolve)
+        self.register("/memory", handle_memory)
+        self.register("/scratchpad", handle_memory)
+        self.register("/diff", handle_diff)
+        self.register("/review", handle_review)
+        self.register("/compact", handle_compact)
         self.register("/history", handle_history)
         self.register("/logs", handle_logs)
         self.register("/health", handle_health)

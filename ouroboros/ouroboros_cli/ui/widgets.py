@@ -17,7 +17,7 @@ def render_decision_card(quiz: QuizItem) -> str:
 
     border_color = Colors.BRIGHT_YELLOW
     title = f" [DECISION REQUIRED: {quiz.quiz_id}] "
-    top = "╭─" + colorize(title, Colors.BRIGHT_WHITE, bold=True) + "─" * max(0, width - len(title) - 4) + "╮"
+    top = "┌─" + colorize(title, Colors.BRIGHT_WHITE, bold=True) + "─" * max(0, width - len(title) - 4) + "┐"
     lines.append(colorize(top, border_color))
 
     # Question text
@@ -44,7 +44,7 @@ def render_decision_card(quiz: QuizItem) -> str:
     lines.append(f"{colorize('│', border_color)}  {colorize(' [0] ', Colors.GRAY)} (Write custom verbatim text answer)")
 
     # Bottom border
-    bot = "╰" + "─" * (width - 2) + "╯"
+    bot = "└" + "─" * (width - 2) + "┘"
     lines.append(colorize(bot, border_color))
 
     return "\n".join(lines)
@@ -174,24 +174,57 @@ def render_status_banner(state: DaemonState, host: str, port: int) -> str:
     return "\n".join(lines)
 
 
+import re
+
+_SPECIAL_TOKEN_RE = re.compile(r"<[｜|][^｜|>]+[｜|]>")
+_DSML_INVOKE_RE = re.compile(r"<[｜|]DSML[｜|]invoke\s+name=[\"']([^\"']+)[\"']>(.*?)</[｜|]DSML[｜|]invoke>", re.DOTALL)
+_DSML_PARAM_RE = re.compile(r"<[｜|]DSML[｜|]parameter\s+name=[\"']([^\"']+)[\"'][^>]*>(.*?)</[｜|]DSML[｜|]parameter>", re.DOTALL)
+_DSML_TAG_RE = re.compile(r"</?[｜|]DSML[｜|][^>]*>")
+_TOOL_RESULT_RE = re.compile(r"<tool_result>(.*?)</tool_result>", re.DOTALL)
+
+
+def clean_terminal_content(text: str) -> str:
+    """Sanitize raw LLM stream text for human terminal display."""
+    if not text:
+        return ""
+
+    def _fmt_invoke(m):
+        tool = m.group(1)
+        params = []
+        for p in _DSML_PARAM_RE.finditer(m.group(2)):
+            val = p.group(2).strip()
+            if len(val) > 40:
+                val = val[:37] + "..."
+            params.append(f"{p.group(1)}={val}")
+        p_str = f" ({', '.join(params)})" if params else ""
+        return f"\n[⚙ {tool}{p_str}]\n"
+
+    res = _DSML_INVOKE_RE.sub(_fmt_invoke, text)
+    res = _DSML_TAG_RE.sub("", res)
+    res = _SPECIAL_TOKEN_RE.sub("", res)
+    res = _TOOL_RESULT_RE.sub(lambda m: f"[tool_result: {len(m.group(1))} chars]", res)
+    return res.strip()
+
+
 def render_chat_message(msg: ChatMessage, render_md: bool = True) -> str:
     """Render chat frame into styled terminal block."""
     role = msg.role.lower()
+    raw_cleaned = clean_terminal_content(msg.content)
 
     if role == "user":
         prefix = colorize("❯ USER", Colors.BRIGHT_GREEN, bold=True)
-        return f"\n{prefix}:\n{msg.content}\n"
+        return f"\n{prefix}:\n{raw_cleaned}\n"
 
     elif role == "assistant":
         if msg.is_progress:
             prefix = colorize("💬 [progress]", Colors.CYAN)
-            return f"{prefix} {msg.content}"
+            return f"{prefix} {raw_cleaned}"
         task_info = f" (task: {msg.task_id[:8]})" if msg.task_id else ""
         prefix = colorize(f"✦ OUROBOROS{task_info}", Colors.BRIGHT_CYAN, bold=True)
-        content = render_markdown(msg.content) if (render_md and msg.markdown) else msg.content
+        content = render_markdown(raw_cleaned) if (render_md and msg.markdown) else raw_cleaned
         return f"\n{prefix}:\n{content}\n"
 
     else:  # system
         prefix = colorize("⚙ SYSTEM", Colors.BRIGHT_YELLOW, bold=True)
-        content = render_markdown(msg.content) if (render_md and msg.markdown and "\n" in msg.content) else msg.content
+        content = render_markdown(raw_cleaned) if (render_md and msg.markdown and "\n" in raw_cleaned) else raw_cleaned
         return f"\n{prefix}: {content}\n"
