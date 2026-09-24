@@ -5,9 +5,24 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sys
 from typing import Optional
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+def is_color_enabled() -> bool:
+    """Check if color output is supported and not disabled by environment."""
+    if os.environ.get("NO_COLOR", "").strip():
+        return False
+    if os.environ.get("OUROBOROS_NO_COLOR", "").strip() in ("1", "true", "yes"):
+        return False
+    term = str(os.environ.get("TERM", "")).strip().lower()
+    if term in ("dumb", ""):
+        return False
+    if os.environ.get("FORCE_COLOR") or os.environ.get("CLICOLOR_FORCE"):
+        return True
+    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
 
 class Colors:
@@ -63,8 +78,11 @@ def colorize(
     dim: bool = False,
     italic: bool = False,
     underline: bool = False,
+    force: Optional[bool] = None,
 ) -> str:
-    """Wrap text in ANSI formatting with automatic reset."""
+    """Wrap text in ANSI formatting with automatic reset, or return plain text if unsupported."""
+    if force is False or (force is None and not is_color_enabled()):
+        return text
     prefix = ""
     if bold:
         prefix += Colors.BOLD

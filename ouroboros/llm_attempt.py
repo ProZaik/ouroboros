@@ -473,14 +473,27 @@ def _compact_transcript_for_fit(messages: List[Dict[str, Any]]) -> Tuple[List[Di
     compacted = copy.deepcopy(messages)
     total_dropped = 0
 
-    # Never fold:
+    # Pass 0: Safety cap on any single massive tool result (> 200k chars) anywhere in transcript
+    for idx in range(2, len(compacted)):
+        msg = compacted[idx]
+        role = str(msg.get("role") or "").lower()
+        if role in ("tool", "function"):
+            content = msg.get("content")
+            if isinstance(content, str) and len(content) > 200_000:
+                head = content[:100_000]
+                tail = content[-100_000:]
+                omitted = len(content) - 200_000
+                total_dropped += omitted
+                msg["content"] = f"{head}\n... [Truncated massive tool output ({len(content)} chars, omitted {omitted} chars) for payload safety] ...\n{tail}"
+
+    # Never fold remaining turns if foldable_indices is empty:
     # - index 0 (system prompt)
     # - index 1 (initial user prompt)
     # - the last 4 messages (immediate recent conversation turns)
     protect_tail = min(4, len(compacted))
     foldable_indices = list(range(2, len(compacted) - protect_tail))
     if not foldable_indices:
-        return messages, 0
+        return compacted, total_dropped
 
     # Pass 1: Fold older tool messages > 300 chars
     for idx in foldable_indices:

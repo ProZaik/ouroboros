@@ -188,7 +188,7 @@ def render_markdown(text: str) -> str:
                     output.append(colorize(f"=== {h_text.upper()} ===", Colors.BRIGHT_CYAN, bold=True))
                 elif level == 2:
                     output.append("")
-                    output.append(colorize(f"── {h_text} ──", Colors.BRIGHT_MAGENTA, bold=True))
+                    output.append(colorize(f"## {h_text}", Colors.BRIGHT_MAGENTA, bold=True))
                 else:
                     output.append(colorize(f"{'#' * level} {h_text}", Colors.BRIGHT_YELLOW, bold=True))
                 continue
