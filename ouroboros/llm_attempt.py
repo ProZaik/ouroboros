@@ -466,6 +466,51 @@ def _prepared_input_measurement(target: Dict[str, Any], payload: Dict[str, Any])
             "route_capacity_confirmed": bool(target.get("context_window_confirmed", False))}
 
 
+def _compact_transcript_for_fit(messages: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    """Fold older tool outputs and intermediate assistant text when prompt history exceeds context window."""
+    if not isinstance(messages, list) or len(messages) <= 2:
+        return messages, 0
+    compacted = copy.deepcopy(messages)
+    total_dropped = 0
+
+    # Never fold:
+    # - index 0 (system prompt)
+    # - index 1 (initial user prompt)
+    # - the last 4 messages (immediate recent conversation turns)
+    protect_tail = min(4, len(compacted))
+    foldable_indices = list(range(2, len(compacted) - protect_tail))
+    if not foldable_indices:
+        return messages, 0
+
+    # Pass 1: Fold older tool messages > 300 chars
+    for idx in foldable_indices:
+        msg = compacted[idx]
+        role = str(msg.get("role") or "").lower()
+        if role in ("tool", "function"):
+            content = msg.get("content")
+            if isinstance(content, str) and len(content) > 300:
+                head = content[:150]
+                tail = content[-150:]
+                omitted = len(content) - 300
+                total_dropped += omitted
+                msg["content"] = f"{head}\n... [Folded older tool output ({len(content)} chars, omitted {omitted} chars) for context fit] ...\n{tail}"
+
+    # Pass 2: Fold earlier assistant messages (> 500 chars, preserving tool_calls)
+    for idx in foldable_indices:
+        msg = compacted[idx]
+        role = str(msg.get("role") or "").lower()
+        if role == "assistant":
+            content = msg.get("content")
+            if isinstance(content, str) and len(content) > 500:
+                head = content[:200]
+                tail = content[-200:]
+                omitted = len(content) - 400
+                total_dropped += omitted
+                msg["content"] = f"{head}\n... [Folded older assistant text ({len(content)} chars, omitted {omitted} chars) for context fit] ...\n{tail}"
+
+    return compacted, total_dropped
+
+
 def _fit_output_payload(target: Dict[str, Any], payload: Dict[str, Any], api_surface: str) -> Dict[str, Any]:
     """Use the shared Nano arithmetic after native tool projection and before sealing."""
     from dataclasses import asdict
@@ -491,6 +536,31 @@ def _fit_output_payload(target: Dict[str, Any], payload: Dict[str, Any], api_sur
     if provider == "local" and measured["input_is_exact"]:
         facts["serving_process_id"] = target["local_input_measurement"].get("process_id")
     target["call_context_fit"] = facts
+
+    if fit.effective_max_tokens <= 0 or fit.fit_status == "unfit" or (measured["input_is_exact"] and fit.fit_status == "insufficient_headroom"):
+        messages = payload.get("messages")
+        if isinstance(messages, list) and len(messages) > 2:
+            compacted_messages, dropped = _compact_transcript_for_fit(messages)
+            if dropped > 0:
+                candidate_payload = {**payload, "messages": compacted_messages}
+                remonitored = _prepared_input_measurement(target, candidate_payload)
+                refit = resolve_call_context_fit(
+                    **remonitored,
+                    caller_max_tokens=candidate_payload[field],
+                    total_target_tokens=OWNER_NANO_TARGET_TOKENS if nano else None,
+                    minimum_free_tokens=NANO_MIN_HEADROOM_TOKENS if nano else 0,
+                    output_limit_enforced=limit_enforced,
+                    reasoning_included_in_limit=True if limit_enforced else None,
+                )
+                if not (refit.effective_max_tokens <= 0 or refit.fit_status == "unfit" or (remonitored["input_is_exact"] and refit.fit_status == "insufficient_headroom")):
+                    payload = candidate_payload
+                    measured = remonitored
+                    fit = refit
+                    facts = asdict(fit)
+                    facts["client_compacted"] = True
+                    facts["client_compacted_dropped_chars"] = dropped
+                    target["call_context_fit"] = facts
+
     if fit.effective_max_tokens <= 0 or fit.fit_status == "unfit" or (measured["input_is_exact"] and fit.fit_status == "insufficient_headroom"):
         error = PhysicalAttemptPreparationFailed(
             "Prepared input does not fit the selected context allowance: the call context fit is unfit, "

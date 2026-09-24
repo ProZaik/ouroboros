@@ -374,6 +374,18 @@ class _OpenAICompatibleLaneMixin:
         attach_processing_receipt(target, usage)
         if isinstance(resp_dict.get("_stream_receipt"), dict):
             usage["stream_receipt"] = dict(resp_dict["_stream_receipt"])
+        bridge_telemetry = resp_dict.get("bridge_telemetry")
+        if not bridge_telemetry and isinstance(usage, dict):
+            bridge_telemetry = usage.get("bridge_telemetry")
+        if not bridge_telemetry and hasattr(wire_completion, "model_extra") and wire_completion.model_extra:
+            bridge_telemetry = wire_completion.model_extra.get("bridge_telemetry")
+        if not bridge_telemetry and hasattr(wire_completion, "_response") and hasattr(wire_completion._response, "headers"):
+            from ouroboros.llm_stream import extract_bridge_telemetry_headers
+            bridge_telemetry = extract_bridge_telemetry_headers(wire_completion._response.headers)
+        if isinstance(bridge_telemetry, dict) and bridge_telemetry:
+            usage["bridge_telemetry"] = bridge_telemetry
+            if bridge_telemetry.get("truncated"):
+                usage["bridge_truncated"] = True
         if isinstance(usage, dict):
             # These keys are host-owned projections of designated outer fields;
             # provider usage extensions must not spoof their provenance.

@@ -1443,6 +1443,12 @@ def call_llm_with_retry(
                 usage, model=model, use_local=use_local,
             )
             add_usage(accumulated_usage, usage)
+            if usage.get("bridge_truncated"):
+                dropped = (usage.get("bridge_telemetry") or {}).get("dropped_chars", 0)
+                accumulated_usage["_pending_bridge_truncation_notice"] = (
+                    f"[Context Notice: Upstream DeepSeek Bridge compacted prompt history "
+                    f"({dropped} characters dropped). Older tool results may be truncated.]"
+                )
             fold_retrieval_usage(accumulated_usage, usage)
             response_ref = persist_observed_call(
                 drive_root,

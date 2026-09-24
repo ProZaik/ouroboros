@@ -678,6 +678,7 @@ def run_llm_loop(
             # Every metered response counts as nanny progress.
             _note_nanny_delegate_activity(tools._ctx, round_idx, accumulated_usage, [])
             if not tool_calls:
+                accumulated_usage.pop("_pending_bridge_truncation_notice", None)
                 final_result = _finalize_loop_candidate(content, limit_ctx, tools, emit_progress)
                 if final_result is None:
                     continue
@@ -693,6 +694,9 @@ def run_llm_loop(
                 tool_calls, tools, drive_logs, task_id, stateful_executor,
                 messages, llm_trace, emit_progress
             )
+            if "_pending_bridge_truncation_notice" in accumulated_usage:
+                notice = accumulated_usage.pop("_pending_bridge_truncation_notice")
+                messages.append({"role": "user", "content": notice})
             advance_explicit_acceptance(tools, limit_ctx, llm_trace, incoming_messages,
                                         _owner_msg_seen, emit_progress)
             wait_after_tools(ctx, messages, llm_trace, accumulated_usage,

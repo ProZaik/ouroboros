@@ -518,6 +518,37 @@ class _SSEFrames:
                     self.event = value
 
 
+def extract_bridge_telemetry_headers(headers: Any) -> dict:
+    """Extract X-Bridge-* telemetry metadata emitted by DeepSeek Bridge."""
+    if not headers or not hasattr(headers, "get"):
+        return {}
+    lookup: Any = headers
+    if hasattr(headers, "items"):
+        try:
+            lookup = {str(k).lower(): v for k, v in headers.items()}
+        except Exception:
+            lookup = headers
+    meta: dict[str, Any] = {}
+    truncated = lookup.get("x-bridge-truncated")
+    if truncated is not None:
+        meta["truncated"] = (truncated.lower() == "true") if isinstance(truncated, str) else bool(truncated)
+    for hdr, key in (
+        ("x-bridge-prompt-chars", "prompt_chars"),
+        ("x-bridge-dropped-chars", "dropped_chars"),
+        ("x-bridge-thinking-duration-ms", "thinking_duration_ms"),
+    ):
+        val = lookup.get(hdr)
+        if val is not None:
+            try:
+                meta[key] = int(val)
+            except (ValueError, TypeError):
+                pass
+    acct = lookup.get("x-bridge-account-id")
+    if acct is not None:
+        meta["account_id"] = str(acct)
+    return meta
+
+
 class _StreamAssembly:
     def __init__(self, response: Any, native: bool, expected_choices: int):
         self.accumulator = AnthropicAccumulator() if native else ChatAccumulator(expected_choices)
@@ -525,6 +556,7 @@ class _StreamAssembly:
         self.raw: list[bytes] = []
         headers = getattr(response, "headers", {})
         self.generation_id = headers.get("x-generation-id", "")
+        self.bridge_telemetry = extract_bridge_telemetry_headers(headers)
 
     def feed(self, chunk: bytes) -> bool:
         self.raw.append(chunk)
@@ -546,6 +578,8 @@ class _StreamAssembly:
         facts = {"attempt_id": attempt_id, "complete": complete,
                  "generation_id": self.generation_id or self.accumulator.body.get("id", ""),
                  "anomalies": self.accumulator.anomaly_facts()}
+        if self.bridge_telemetry:
+            facts["bridge_telemetry"] = dict(self.bridge_telemetry)
         evidence = {"wire_base64": base64.b64encode(b"".join(self.raw)).decode("ascii"),
                     "partial_assembly": self.accumulator.partial(), **facts}
         try:
@@ -571,7 +605,13 @@ class _StreamAssembly:
     def result(self) -> dict:
         for event, data in self.frames.feed(b"", final=True):
             self.accumulator.accept(event, data)
-        return self.accumulator.result()
+        res = self.accumulator.result()
+        if self.bridge_telemetry:
+            telemetry = dict(self.bridge_telemetry)
+            if isinstance(res.get("bridge_telemetry"), dict):
+                telemetry.update(res["bridge_telemetry"])
+            res["bridge_telemetry"] = telemetry
+        return res
 
 
 def consume_stream(stream: Any, *, native: bool = False, expected_choices: int = 1) -> AssembledResponse:
