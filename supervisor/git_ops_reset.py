@@ -477,7 +477,15 @@ def sync_runtime_dependencies(reason: str) -> Tuple[bool, str]:
     from ouroboros.platform_layer import pip_install_target_args
 
     req_path = _go().REPO_DIR / "requirements-runtime.lock"
-    if not req_path.exists():
+    is_android = (
+        hasattr(sys, "getandroidapilevel")
+        or "ANDROID_DATA" in os.environ
+        or "TERMUX_VERSION" in os.environ
+        or "com.termux" in sys.executable
+    )
+    if is_android and (_go().REPO_DIR / "requirements-runtime-android.lock").exists():
+        req_path = _go().REPO_DIR / "requirements-runtime-android.lock"
+    elif not req_path.exists():
         # Preserve upgrades from managed repositories created before uv locks.
         req_path = _go().REPO_DIR / "requirements.txt"
     # The sixth and last pip call site. On a packaged install `sys.executable` IS the

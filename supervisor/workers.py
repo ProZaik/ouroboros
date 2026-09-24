@@ -1924,6 +1924,8 @@ def _terminalize_invalid_pending_depth(task: Dict[str, Any], detail: str) -> boo
     if not task_id:
         return False
     result_root = pathlib.Path(task.get("budget_drive_root") or DRIVE_ROOT)
+    if str(result_root).startswith("/root/Ouroboros") and not result_root.exists():
+        result_root = DRIVE_ROOT
     raw_depth = task.get("depth")
     if raw_depth is not None and not isinstance(raw_depth, (str, int, float, bool)):
         raw_depth = repr(raw_depth)[:200]

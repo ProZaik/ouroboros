@@ -84,6 +84,8 @@ def _authoritative_terminal_cost(
     from supervisor.state import reconstruct_task_cost
 
     authority_root = pathlib.Path(task.get("budget_drive_root") or drive_root)
+    if str(authority_root).startswith("/root/Ouroboros") and not authority_root.exists():
+        authority_root = drive_root
     if breakdown is not None and authority_root.resolve() != pathlib.Path(drive_root).resolve():
         breakdown = None  # A split/copyback task keeps its canonical monetary authority.
     projection = reconstruct_task_cost(task_id, fields=True, drive_root=authority_root,

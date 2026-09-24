@@ -188,6 +188,16 @@ def _drive_root(value: pathlib.Path | str | None = None) -> pathlib.Path:
         resolved = pathlib.Path(value)
         if not resolved.is_absolute():
             raise UsageAccountingError(f"usage accounting drive root must be absolute: {resolved}")
+        if str(resolved).startswith("/root/Ouroboros") and not resolved.exists():
+            from ouroboros.config import DATA_DIR
+            target_data = pathlib.Path(DATA_DIR)
+            if resolved.name == "data":
+                return target_data
+            try:
+                suffix = resolved.relative_to(pathlib.Path("/root/Ouroboros/data"))
+                return target_data / suffix
+            except ValueError:
+                return target_data
         return resolved
     configured = str(os.environ.get("OUROBOROS_DATA_DIR") or "").strip()
     if configured:

@@ -793,6 +793,8 @@ def reconstruct_task_cost(
             from ouroboros.usage_accounting import ensure_legacy_imported, usage_breakdown
 
             authority_root = pathlib.Path(drive_root) if drive_root is not None else DRIVE_ROOT
+            if str(authority_root).startswith("/root/Ouroboros") and not authority_root.exists():
+                authority_root = DRIVE_ROOT
             if breakdown is None:
                 ensure_legacy_imported(authority_root)
                 bucket = usage_breakdown(authority_root, task_id=want)
