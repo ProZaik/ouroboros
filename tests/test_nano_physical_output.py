@@ -102,3 +102,31 @@ def test_local_serving_window_uses_live_arguments_not_training_or_fallback():
         "context_window": 16384, "confirmed": True, "source": "owned_server_arguments", "process_id": 123}
     manager._proc = SimpleNamespace(poll=lambda: 0, pid=123)
     assert manager.serving_context_evidence()["context_window"] is None
+
+
+def test_unfit_estimate_on_non_nano_route_fails_closed(transport, monkeypatch):
+    """A non-Nano route must refuse before dispatch when the estimated prompt
+    exceeds its declared window: the pre-dispatch capacity guard is no longer
+    gated on context_mode == "nano"."""
+    _, client, sent = transport
+    monkeypatch.setattr(config, "get_context_mode", lambda: "max")
+    monkeypatch.setattr(
+        llm_attempt,
+        "_prepared_input_measurement",
+        lambda target, payload: {
+            "input_tokens": 200000,
+            "input_is_exact": False,
+            "tokenizer_template_provenance": {"source": "estimated"},
+            "route_capacity_tokens": 131072,
+            "route_capacity_confirmed": False,
+        },
+    )
+    with pytest.raises(ua.PhysicalAttemptPreparationFailed) as failure:
+        client.chat(
+            [{"role": "user", "content": "estimated input"}],
+            "openai::test-model",
+            max_tokens=65536,
+            context_mode="max",
+        )
+    assert failure.value.call_context_fit["fit_status"] == "unfit"
+    assert sent == []

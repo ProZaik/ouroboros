@@ -433,8 +433,12 @@ def _finalized_physical_candidate(
     target: Dict[str, Any], payload: Dict[str, Any], api_surface: str,
 ) -> Dict[str, Any]:
     physical = _physical_candidate(payload)
-    if target.get("context_mode") == "nano":
-        physical = _fit_output_payload(target, physical, api_surface)
+    # Capacity guard for EVERY route, not only Nano: a route that declares a
+    # context window must refuse before dispatch when the estimated prompt
+    # exceeds it. Opaque routes (no enforceable native output field) and
+    # routes whose estimate fits the declared window are pass-through, so
+    # this is a refusal gate, not a silent budget change.
+    physical = _fit_output_payload(target, physical, api_surface)
     return prepare_wire_payload_for_send(
         {**target, "contract_headers": processing_contract_headers(target, physical)},
         physical, api_surface=api_surface,
