@@ -502,6 +502,22 @@ def _measure_round_main_fit(
     automatic_pass_used: bool,
 ) -> Any:
     plan = ctx.context_fit_plan
+    if plan is not None and str(ctx.active_model or "") != str(getattr(plan, "model", "") or ""):
+        try:
+            rebound_plan, rebound_mode = _loop()._rebind_context_fit_plan(
+                plan,
+                ctx.tools,
+                ctx.messages,
+                model=str(ctx.active_model or ""),
+                use_local=bool(ctx.active_use_local),
+                preferred_mode=str(ctx.active_context_mode or "max"),
+                tool_schemas=ctx.tool_schemas,
+            )
+            ctx.context_fit_plan = rebound_plan
+            ctx.active_context_mode = rebound_mode
+            plan = rebound_plan
+        except Exception:
+            pass
     if plan is None or str(ctx.active_model or "") != str(getattr(plan, "model", "") or ""):
         return None
     from ouroboros.context_fit import measure_main_fit
