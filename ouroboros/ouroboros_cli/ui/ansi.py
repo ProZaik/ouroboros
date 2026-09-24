@@ -8,7 +8,11 @@ import shutil
 import sys
 from typing import Optional
 
-_ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+_ANSI_ESCAPE_RE = re.compile(
+    r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"  # Standard ANSI escapes
+    r"|\?\[[0-9;]*[a-zA-Z]"                   # Malformed ?[1m, ?[93m, ?[0m from dumb terminal replacement
+    r"|\^\[\[[0-9;]*[a-zA-Z]"                 # Caret notation ^[[1m
+)
 
 
 def is_color_enabled() -> bool:
@@ -17,12 +21,22 @@ def is_color_enabled() -> bool:
         return False
     if os.environ.get("OUROBOROS_NO_COLOR", "").strip() in ("1", "true", "yes"):
         return False
-    term = str(os.environ.get("TERM", "")).strip().lower()
-    if term in ("dumb", ""):
-        return False
     if os.environ.get("FORCE_COLOR") or os.environ.get("CLICOLOR_FORCE"):
         return True
-    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    term = str(os.environ.get("TERM", "")).strip().lower()
+    if term in ("dumb", "", "unknown"):
+        return False
+    if not (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()):
+        return False
+    try:
+        from prompt_toolkit.output import create_output
+        from prompt_toolkit.output.color_depth import ColorDepth
+        out = create_output()
+        if out.get_default_color_depth() == ColorDepth.DEPTH_1_BIT:
+            return False
+    except Exception:
+        pass
+    return True
 
 
 class Colors:
@@ -102,6 +116,40 @@ def colorize(
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape codes from text to compute true display length."""
     return _ANSI_ESCAPE_RE.sub("", text)
+
+
+def clean_broken_escapes(text: str) -> str:
+    """Sanitize any raw control escapes or ?[1m sequences, returning clean readable text."""
+    if not text:
+        return ""
+    return _ANSI_ESCAPE_RE.sub("", text)
+
+
+def cprint(text: str = "", end: str = "\n", file=None, flush: bool = False) -> None:
+    """Hermes/Antigravity-parity formatted terminal print.
+
+    Routes ANSI formatted strings through prompt_toolkit's output renderer or
+    strips escapes if color is unsupported or disabled, preventing raw \\033
+    escape sequences or ?[1m artifacts from corrupting output.
+    """
+    target_file = file or sys.stdout
+    text_str = str(text)
+
+    if target_file is not sys.stdout:
+        out_text = strip_ansi(text_str) if not is_color_enabled() else text_str
+        print(out_text, end=end, file=target_file, flush=flush)
+        return
+
+    if not is_color_enabled():
+        print(strip_ansi(text_str), end=end, file=sys.stdout, flush=flush)
+        return
+
+    try:
+        from prompt_toolkit import print_formatted_text as _pt_print
+        from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
+        _pt_print(_PT_ANSI(text_str), end=end, flush=flush)
+    except Exception:
+        print(strip_ansi(text_str), end=end, file=sys.stdout, flush=flush)
 
 
 def get_terminal_width(default: int = 80) -> int:

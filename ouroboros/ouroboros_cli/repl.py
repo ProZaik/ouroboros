@@ -14,7 +14,7 @@ from ouroboros_cli.models.contracts import ChatMessage, LogEvent, QuizItem
 from ouroboros_cli.models.state import SessionState
 from ouroboros_cli.transport.client import OuroborosHTTPClient
 from ouroboros_cli.transport.websocket import OuroborosWSClient
-from ouroboros_cli.ui.ansi import Colors, Style, colorize
+from ouroboros_cli.ui.ansi import Colors, Style, colorize, cprint
 from ouroboros_cli.ui.prompt import create_prompt_session
 from ouroboros_cli.ui.widgets import (
     render_chat_message,
@@ -46,11 +46,11 @@ class OuroborosREPL:
 
         def on_open(data):
             self.state.connected = True
-            print(colorize(f"✓ Connected to Ouroboros daemon at {self.config.ws_url}", Colors.BRIGHT_GREEN, bold=True))
+            cprint(colorize(f"✓ Connected to Ouroboros daemon at {self.config.ws_url}", Colors.BRIGHT_GREEN, bold=True))
 
         def on_disconnect(data):
             self.state.set_disconnected()
-            print(colorize(f"⚠ Disconnected from Ouroboros daemon. Reconnecting in background...", Colors.BRIGHT_YELLOW))
+            cprint(colorize(f"⚠ Disconnected from Ouroboros daemon. Reconnecting in background...", Colors.BRIGHT_YELLOW))
 
         def on_heartbeat(data):
             self.state.update_heartbeat()
@@ -71,7 +71,7 @@ class OuroborosREPL:
                 return
 
             rendered = render_chat_message(msg, render_md=self.config.render_markdown)
-            print(rendered)
+            cprint(rendered)
 
         def on_log(data):
             event = LogEvent.from_dict(data)
@@ -80,20 +80,20 @@ class OuroborosREPL:
             # Print prominent tool activity
             if event.tool or event.level in ("warning", "error"):
                 line = render_tool_event(event)
-                print(line)
+                cprint(line)
 
         def on_quiz(data):
             quiz = QuizItem.from_dict(data)
             self.state.set_quiz(quiz)
             card = render_decision_card(quiz)
-            print("\n" + card + "\n")
+            cprint("\n" + card + "\n")
 
         def on_quiz_state(data):
             quiz_id = str(data.get("quiz_id") or "")
             state_str = str(data.get("state") or data.get("quiz_state") or "")
             if state_str == "answered":
                 self.state.resolve_quiz(quiz_id)
-                print(colorize(f"✓ Decision {quiz_id} recorded as answered.", Colors.BRIGHT_GREEN))
+                cprint(colorize(f"✓ Decision {quiz_id} recorded as answered.", Colors.BRIGHT_GREEN))
 
         def on_typing(data):
             self.state.is_thinking = True
@@ -112,20 +112,20 @@ class OuroborosREPL:
         self._running = True
 
         # Print welcome banner
-        print(colorize("╔══════════════════════════════════════════════════════════════╗", Colors.BRIGHT_CYAN))
-        print(colorize("║              OUROBOROS AUTONOMOUS AGENT REPL                ║", Colors.BRIGHT_CYAN, bold=True))
-        print(colorize("║           Full Web UI Parity Streaming Terminal             ║", Colors.BRIGHT_CYAN))
-        print(colorize("╚══════════════════════════════════════════════════════════════╝", Colors.BRIGHT_CYAN))
-        print(colorize("Connecting to daemon...", Colors.GRAY))
+        cprint(colorize("╔══════════════════════════════════════════════════════════════╗", Colors.BRIGHT_CYAN))
+        cprint(colorize("║              OUROBOROS AUTONOMOUS AGENT REPL                ║", Colors.BRIGHT_CYAN, bold=True))
+        cprint(colorize("║           Full Web UI Parity Streaming Terminal             ║", Colors.BRIGHT_CYAN))
+        cprint(colorize("╚══════════════════════════════════════════════════════════════╝", Colors.BRIGHT_CYAN))
+        cprint(colorize("Connecting to daemon...", Colors.GRAY))
 
         # Check initial daemon state via HTTP
         try:
             d_state = self.http_client.state()
             self.state.daemon_state = d_state
             banner = render_status_banner(d_state, self.config.host, self.config.port)
-            print(banner)
+            cprint(banner)
         except Exception as exc:
-            print(colorize(f"Warning: Could not fetch initial state: {exc}", Colors.BRIGHT_YELLOW))
+            cprint(colorize(f"Warning: Could not fetch initial state: {exc}", Colors.BRIGHT_YELLOW))
 
         # Start WebSocket client in background
         await self.ws_client.start()
@@ -133,7 +133,7 @@ class OuroborosREPL:
         # Brief pause to allow initial WS connection
         await asyncio.sleep(0.5)
 
-        print(colorize("Ready! Type your message or /help for commands. Press Ctrl+D to exit.\n", Colors.GRAY))
+        cprint(colorize("Ready! Type your message or /help for commands. Press Ctrl+D to exit.\n", Colors.GRAY))
 
         # Main interactive loop with patch_stdout
         with patch_stdout():
@@ -162,7 +162,7 @@ class OuroborosREPL:
                             self.ws_client,
                         )
                         if output:
-                            print(output)
+                            cprint(output)
                         if should_exit:
                             break
                         continue
@@ -177,14 +177,14 @@ class OuroborosREPL:
                                 option_index=opt_idx,
                             )
                             self.state.resolve_quiz(open_quiz.quiz_id, answered_index=opt_idx)
-                            print(colorize(f"✓ Answered Option {text}: {open_quiz.options[opt_idx].text}", Colors.BRIGHT_GREEN, bold=True))
+                            cprint(colorize(f"✓ Answered Option {text}: {open_quiz.options[opt_idx].text}", Colors.BRIGHT_GREEN, bold=True))
                             continue
                         except Exception as exc:
-                            print(colorize(f"Error answering decision: {exc}", Colors.BRIGHT_RED))
+                            cprint(colorize(f"Error answering decision: {exc}", Colors.BRIGHT_RED))
                             continue
 
                     # Otherwise, send as chat prompt
-                    print(colorize("❯ Sending...", Colors.GRAY))
+                    cprint(colorize("❯ Sending...", Colors.GRAY))
                     try:
                         await self.ws_client.send_chat(
                             content=text,
@@ -192,12 +192,12 @@ class OuroborosREPL:
                             project_id=self.state.project_id,
                         )
                     except Exception as exc:
-                        print(colorize(f"Failed to send message: {exc}", Colors.BRIGHT_RED))
+                        cprint(colorize(f"Failed to send message: {exc}", Colors.BRIGHT_RED))
 
                 except (KeyboardInterrupt, asyncio.CancelledError):
-                    print(colorize("\n(Cancelled input. Use /quit or Ctrl+D to exit)", Colors.GRAY))
+                    cprint(colorize("\n(Cancelled input. Use /quit or Ctrl+D to exit)", Colors.GRAY))
                 except EOFError:
-                    print(colorize("\nExiting Ouroboros REPL. Goodbye!", Colors.BRIGHT_CYAN))
+                    cprint(colorize("\nExiting Ouroboros REPL. Goodbye!", Colors.BRIGHT_CYAN))
                     break
 
         await self.ws_client.stop()

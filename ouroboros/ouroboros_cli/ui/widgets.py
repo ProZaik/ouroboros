@@ -6,7 +6,7 @@ import datetime
 from typing import Dict, List, Optional
 
 from ouroboros_cli.models.contracts import ChatMessage, DaemonState, LogEvent, QuizItem, TaskSummary
-from ouroboros_cli.ui.ansi import Colors, Style, colorize, get_terminal_width, strip_ansi
+from ouroboros_cli.ui.ansi import Colors, Style, clean_broken_escapes, colorize, get_terminal_width, is_color_enabled, strip_ansi
 from ouroboros_cli.ui.markdown import render_markdown
 
 
@@ -203,6 +203,7 @@ def clean_terminal_content(text: str) -> str:
     res = _DSML_TAG_RE.sub("", res)
     res = _SPECIAL_TOKEN_RE.sub("", res)
     res = _TOOL_RESULT_RE.sub(lambda m: f"[tool_result: {len(m.group(1))} chars]", res)
+    res = clean_broken_escapes(res)
     return res.strip()
 
 

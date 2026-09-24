@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
-from ouroboros_cli.ui.ansi import Colors, Style, colorize, get_terminal_width, strip_ansi
+from ouroboros_cli.ui.ansi import Colors, Style, colorize, get_terminal_width, is_color_enabled, strip_ansi
 
 # Optional pygments integration
 try:
@@ -19,6 +19,8 @@ except ImportError:
 
 def _highlight_code(code: str, language: str = "") -> str:
     """Highlight code block using Pygments or return formatted plain text."""
+    if not is_color_enabled():
+        return code
     if _HAS_PYGMENTS:
         try:
             if language:
@@ -227,4 +229,7 @@ def render_markdown(text: str) -> str:
     if table_lines:
         output.append(_render_table(table_lines))
 
-    return "\n".join(output)
+    res = "\n".join(output)
+    if not is_color_enabled():
+        return strip_ansi(res)
+    return res
