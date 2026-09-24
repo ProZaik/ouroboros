@@ -466,25 +466,33 @@ def _prepared_input_measurement(target: Dict[str, Any], payload: Dict[str, Any])
             "route_capacity_confirmed": bool(target.get("context_window_confirmed", False))}
 
 
-def _compact_transcript_for_fit(messages: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+def _compact_transcript_for_fit(
+    messages: List[Dict[str, Any]],
+    capacity_tokens: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], int]:
     """Fold older tool outputs and intermediate assistant text when prompt history exceeds context window."""
     if not isinstance(messages, list) or len(messages) <= 2:
         return messages, 0
     compacted = copy.deepcopy(messages)
     total_dropped = 0
 
-    # Pass 0: Safety cap on any single massive tool result (> 50k chars) anywhere in transcript
+    # Pass 0: Safety cap on any single massive tool result (> 250k tokens / 1,000,000 chars, half the context window)
+    context_tokens = int(capacity_tokens or 500_000)
+    tool_cap_tokens = max(250_000, context_tokens // 2)
+    max_tool_chars = tool_cap_tokens * 4  # 1,000,000 chars for 250k tokens
+    half_cap = max_tool_chars // 2
+
     for idx in range(2, len(compacted)):
         msg = compacted[idx]
         role = str(msg.get("role") or "").lower()
         if role in ("tool", "function"):
             content = msg.get("content")
-            if isinstance(content, str) and len(content) > 50_000:
-                head = content[:25_000]
-                tail = content[-25_000:]
-                omitted = len(content) - 50_000
+            if isinstance(content, str) and len(content) > max_tool_chars:
+                head = content[:half_cap]
+                tail = content[-half_cap:]
+                omitted = len(content) - max_tool_chars
                 total_dropped += omitted
-                msg["content"] = f"{head}\n... [Truncated massive tool output ({len(content)} chars -> 50000 chars, omitted {omitted} chars) for context safety] ...\n{tail}"
+                msg["content"] = f"{head}\n... [Truncated massive tool output ({len(content)} chars -> {max_tool_chars} chars, omitted {omitted} chars) for {tool_cap_tokens}k token envelope] ...\n{tail}"
 
     # Never fold remaining turns if foldable_indices is empty:
     # - index 0 (system prompt)

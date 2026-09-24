@@ -166,7 +166,7 @@ def _resolve_effective_timeout(
 from ouroboros.tools.process_facts import describe_returncode as _describe_returncode  # noqa: E402, F401 — historical private spelling for call sites and tests
 
 
-def _format_process_output(stdout: str, stderr: str, *, limit: int = 50_000) -> str:
+def _format_process_output(stdout: str, stderr: str, *, limit: int = 1_000_000) -> str:
     """Mask diagnostic copies before bounds can split a selected secret."""
     from ouroboros.tools.process_facts import redact_process_data
 

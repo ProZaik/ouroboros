@@ -71,3 +71,38 @@ def test_compact_transcript_short_conversation_unchanged():
     compacted, dropped = _compact_transcript_for_fit(messages)
     assert compacted == messages
     assert dropped == 0
+
+
+def test_compact_transcript_backlog_preserved_under_1m_chars():
+    # A 100k character backlog note or large file must NOT be truncated by Pass 0
+    backlog_text = "# Improvement Backlog\n" + ("- item: detail\n" * 4000)
+    assert len(backlog_text) > 60_000
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Read the backlog"},
+        {"role": "tool", "content": backlog_text},
+        {"role": "assistant", "content": "I see the backlog"},
+        {"role": "user", "content": "What is next?"},
+        {"role": "assistant", "content": "Thinking..."},
+    ]
+    compacted, dropped = _compact_transcript_for_fit(messages, capacity_tokens=500_000)
+    # Tool output was NOT truncated by Pass 0 because it is under 1,000,000 characters
+    assert compacted[2]["content"] == backlog_text
+
+
+def test_compact_transcript_massive_tool_capped_at_250k_tokens():
+    # A massive 1.2M char tool result (like a 4.8MB AST dump) must be capped to 1M chars (250k tokens)
+    massive_tool = "H" * 600_000 + "MIDDLE" + "T" * 600_000  # 1.2M chars
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run massive tool"},
+        {"role": "tool", "content": massive_tool},
+        {"role": "assistant", "content": "Got result"},
+        {"role": "user", "content": "Continue"},
+        {"role": "assistant", "content": "Working..."},
+    ]
+    compacted, dropped = _compact_transcript_for_fit(messages, capacity_tokens=500_000)
+    assert dropped == len(massive_tool) - 1_000_000
+    assert "... [Truncated massive tool output" in compacted[2]["content"]
+    assert compacted[2]["content"].startswith("H" * 500_000)
+    assert compacted[2]["content"].endswith("T" * 500_000)
