@@ -702,6 +702,8 @@ def check_history_limit(readme_text: str) -> List[str]:
         pass
 
     warnings: List[str] = []
+    if readme_text.strip() and "version history" not in readme_text.lower():
+        return ["skipped: input has no Version History section"]
     major_rows, minor_rows, patch_rows = 0, 0, 0
 
     for m in _VERSION_ROW_RE.finditer(readme_text):

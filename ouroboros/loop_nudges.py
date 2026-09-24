@@ -405,15 +405,24 @@ def rounds_since_last_mutative_call(llm_trace: Optional[Dict[str, Any]], current
     if not llm_trace:
         return current_round
     rows = [r for r in llm_trace.get("tool_calls", []) if isinstance(r, dict)]
-    last_mutation_round = 0
+    last_mutation_round = -1
     for r in rows:
         tool = str(r.get("tool") or "")
         if tool in {"edit_text", "write_file", "apply_patch", "commit_reviewed"} and not r.get("is_error"):
             r_idx = r.get("round_idx")
+            if r_idx is None:
+                round_id = str(r.get("round_id") or "")
+                if ":round:" in round_id:
+                    try:
+                        r_idx = int(round_id.rsplit(":round:", 1)[-1])
+                    except (ValueError, TypeError):
+                        pass
             if r_idx is not None and isinstance(r_idx, int):
                 last_mutation_round = max(last_mutation_round, r_idx)
             else:
-                last_mutation_round = current_round
+                last_mutation_round = max(last_mutation_round, 0)
+    if last_mutation_round < 0:
+        return current_round
     return max(0, current_round - last_mutation_round)
 
 
@@ -428,26 +437,73 @@ def _maybe_inject_evolution_deadline(
     """Inject a decide-or-abstain deadline for self-evolution tasks after 10+ non-mutating rounds."""
     if task_type != "evolution" or round_idx < 10:
         return False
-    if accumulated_usage.get("_last_evolution_deadline_round") == round_idx:
+    consecutive_non_mutating = rounds_since_last_mutative_call(llm_trace, round_idx)
+    if consecutive_non_mutating < 10:
         return False
-    rows = [r for r in (llm_trace or {}).get("tool_calls", []) if isinstance(r, dict)]
-    mutations = [
-        r for r in rows
-        if str(r.get("tool") or "") in {"edit_text", "write_file", "apply_patch", "commit_reviewed"}
-        and not r.get("is_error")
-    ]
-    if mutations:
+    last_injected = accumulated_usage.get("_last_evolution_deadline_round")
+    if last_injected is not None and round_idx - last_injected < 3:
         return False
     accumulated_usage["_last_evolution_deadline_round"] = round_idx
     notice = (
         f"[DECIDE-OR-ABSTAIN DEADLINE — round {round_idx}]\n"
-        "This self-evolution cycle has run for 10+ rounds without any code or file mutations.\n"
+        f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
         "Reconnaissance is exhausted. You MUST now either:\n"
         "1. Perform the intended code change via `edit_text` or `write_file` and commit with `commit_reviewed`, OR\n"
         "2. Conclude this cycle with an explicit, honest NO_OP / ABSTAIN explanation.\n"
         "Do not continue read-only exploration without making a decision."
     )
     _loop()._append_or_merge_user_message(messages, notice)
+    return True
+
+
+def _maybe_inject_plan_review_directive(
+    round_idx: int,
+    messages: List[Dict[str, Any]],
+    accumulated_usage: Dict[str, Any],
+    *,
+    llm_trace: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Nudge task to implement immediately when plan review returns REVISE_PLAN (ibl-1d480f748072)."""
+    if not llm_trace:
+        return False
+    rows = [r for r in llm_trace.get("tool_calls", []) if isinstance(r, dict)]
+    has_revise_plan = False
+    last_plan_idx = -1
+    for r in rows:
+        if str(r.get("tool") or "") == "plan_task":
+            res = str(r.get("result") or "")
+            if "REVISE_PLAN" in res:
+                has_revise_plan = True
+                round_id = str(r.get("round_id") or "")
+                if ":round:" in round_id:
+                    try:
+                        last_plan_idx = int(round_id.rsplit(":round:", 1)[-1])
+                    except (ValueError, TypeError):
+                        pass
+    if not has_revise_plan:
+        return False
+    mutations_after = False
+    for r in rows:
+        if str(r.get("tool") or "") in {"edit_text", "write_file", "apply_patch", "commit_reviewed"} and not r.get("is_error"):
+            round_id = str(r.get("round_id") or "")
+            if ":round:" in round_id:
+                try:
+                    if int(round_id.rsplit(":round:", 1)[-1]) > last_plan_idx:
+                        mutations_after = True
+                        break
+                except (ValueError, TypeError):
+                    pass
+    if mutations_after:
+        return False
+    if accumulated_usage.get("_last_plan_review_directive_round") == round_idx:
+        return False
+    accumulated_usage["_last_plan_review_directive_round"] = round_idx
+    directive = (
+        "[PLAN-REVIEW ACTION REQUIRED]\n"
+        "Plan review returned REVISE_PLAN findings. Further read-only reconnaissance will not advance the task.\n"
+        "Incorporate the findings and begin implementation with `edit_text` or `write_file` now, or re-plan with `plan_task`."
+    )
+    _loop()._append_or_merge_user_message(messages, directive)
     return True
 
 
@@ -493,7 +549,10 @@ def _inject_round_checkpoints(
     evolution_deadline = _maybe_inject_evolution_deadline(
         round_idx, messages, accumulated_usage, llm_trace=llm_trace, task_type=task_type,
     )
-    return bool(checkpoint or time_budget or cost_budget or nanny_economics or evolution_deadline)
+    plan_directive = _maybe_inject_plan_review_directive(
+        round_idx, messages, accumulated_usage, llm_trace=llm_trace,
+    )
+    return bool(checkpoint or time_budget or cost_budget or nanny_economics or evolution_deadline or plan_directive)
 
 
 def _forced_delegation_note(tools_ctx: Any, llm_trace: Dict[str, Any]) -> str:

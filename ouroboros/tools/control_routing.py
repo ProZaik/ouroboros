@@ -333,6 +333,16 @@ def _promote_chat_to_task(
         sanitize_project_id,
     )
 
+    # ibl-f8ad784e7b9d: warn when a light-capped task promotes work targeting system_repo
+    current_cap = str((getattr(ctx, "task_metadata", {}) or {}).get("runtime_mode_cap") or "").strip().lower()
+    if current_cap == "light" and not str(workspace_root or "").strip() and not str(project_id or "").strip():
+        if any(term in goal.lower() for term in ("ouroboros/", "edit_text", "commit_reviewed", "modify repo", "patch repo")):
+            return (
+                "⚠️ CAPABILITY_WARNING (promote_chat_to_task): Current conversation carries runtime_mode_cap=light, "
+                "which forbids mutating the Ouroboros repository. Promoted child tasks inherit this cap and cannot edit system_repo. "
+                "Specify an external workspace_root, project_id, or request human intervention for system repo modifications."
+            )
+
     display_name = str(project_name or "").strip()
     pid = ""
     if str(project_id or "").strip():

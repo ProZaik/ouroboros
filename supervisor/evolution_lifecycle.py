@@ -145,11 +145,18 @@ def enqueue_evolution_task_if_needed() -> None:
         from supervisor import git_ops as _git_ops
 
         _dirty_rc, _dirty_out, _ = _git_ops.git_capture(["git", "status", "--porcelain"])
-        _dirty_paths = (
-            [line[3:].strip() for line in _dirty_out.splitlines() if len(line) >= 4 and line[:2].strip()]
-            if _dirty_rc == 0
-            else []
-        )
+        _dirty_paths = []
+        if _dirty_rc == 0:
+            for line in _dirty_out.splitlines():
+                if len(line) >= 4 and line[:2].strip():
+                    p = line[3:].strip()
+                    p_low = p.lower()
+                    if line.startswith("?? ") and (
+                        p_low.endswith((".bak", ".tmp", "~", ".pyc")) or "__pycache__" in p_low
+                    ):
+                        log.warning("dirty preflight: untracked non-source leftover ignored: %s", p)
+                        continue
+                    _dirty_paths.append(p)
     except Exception:
         log.debug("dirty-worktree preflight skipped: git capture unavailable", exc_info=True)
         _dirty_paths = []
@@ -1514,6 +1521,33 @@ def build_evolution_task_text(cycle: int) -> str:
                 f"- {row.get('task_id')}: execution={execution_status}, objective={objective_status}; "
                 f"rounds={row.get('rounds', 0)}; cost={row_cost}"
             )
+    trailing_no_ops = 0
+    prior_abstentions = []
+    for row in reversed(history):
+        tx = row.get("transaction") or {}
+        outcome = tx.get("cycle_outcome") or ""
+        if outcome == "no_op":
+            trailing_no_ops += 1
+            reason = tx.get("no_op_reason") or tx.get("recovery_hint") or (tx.get("outcome_axes") or {}).get("execution", {}).get("reason_code") or ""
+            c_num = tx.get("cycle") or row.get("cycle") or "?"
+            if reason:
+                prior_abstentions.append(f"- Cycle #{c_num}: {reason}")
+        else:
+            break
+
+    if prior_abstentions:
+        parts.extend(["", "## Prior No-Op Abstention Reasons (do NOT re-derive known facts)", *prior_abstentions[:5]])
+
+    if trailing_no_ops >= 3:
+        parts.extend([
+            "",
+            "## ⚠️ MANDATORY FALSIFY-OR-CLOSE DIRECTIVE (>=3 consecutive NO-OP cycles)",
+            f"This objective has had {trailing_no_ops} consecutive NO-OP cycles without landing any modifications.",
+            "You MUST NOT spend this cycle in passive reconnaissance or re-confirming already-known facts.",
+            "You MUST either:",
+            "1. Reproduce the claimed defect/gap with a concrete test or reproduction call and implement the fix, OR",
+            "2. Conclude that the objective's premise is invalid/falsified or already satisfied, update the backlog item to 'status: done' or 'status: closed' with proof, and explicitly exit.",
+        ])
     # Fix B (C10.2): surface the durable improvement backlog and recent solve-capability
     # as optional CONTEXT, never a directive. Ouroboros decides what (if anything) to act
     # on — an evolution cycle is NOT obligated to draw from the backlog or repeat past

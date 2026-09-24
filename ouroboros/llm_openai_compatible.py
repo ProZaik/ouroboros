@@ -85,6 +85,45 @@ class _OpenAICompatibleLaneMixin:
             tool["parameters"] = parameters
         return tool
 
+    @staticmethod
+    def _guard_payload_size(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Preemptively compact oversized messages if payload approaches 10MB limit (ibl-c52a93efd2c2)."""
+        messages = kwargs.get("messages")
+        if not isinstance(messages, list):
+            return kwargs
+        try:
+            approx_size = sum(
+                len(str(m.get("content") or "")) + len(str(m.get("reasoning_content") or ""))
+                for m in messages if isinstance(m, dict)
+            )
+            if approx_size < 6_000_000:
+                return kwargs
+        except Exception:
+            return kwargs
+        log.warning("LLM request payload approx size %d bytes exceeds 6MB; applying protective compaction", approx_size)
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            if isinstance(content, str) and len(content) > 100_000:
+                half = 40_000
+                msg["content"] = (
+                    content[:half]
+                    + f"\n\n... [PROTECTIVE COMPACTION: {len(content) - 2 * half} characters truncated to avoid HTTP 413 Payload Too Large] ...\n\n"
+                    + content[-half:]
+                )
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str) and len(part["text"]) > 100_000:
+                        t = part["text"]
+                        half = 40_000
+                        part["text"] = (
+                            t[:half]
+                            + f"\n\n... [PROTECTIVE COMPACTION: {len(t) - 2 * half} characters truncated to avoid HTTP 413 Payload Too Large] ...\n\n"
+                            + t[-half:]
+                        )
+        return kwargs
+
     def _build_remote_kwargs(
         self,
         target: Dict[str, Any],
@@ -221,7 +260,7 @@ class _OpenAICompatibleLaneMixin:
                 if isinstance(_eb, dict):
                     _eb["cache"] = {"no-cache": True}
             apply_processing_preference(target, kwargs)
-            return kwargs
+            return self._guard_payload_size(kwargs)
 
         if any(isinstance(m, dict) and "reasoning_content" in m for m in messages):
             # ``reasoning_content`` in canonical history is direct-DeepSeek
@@ -357,7 +396,7 @@ class _OpenAICompatibleLaneMixin:
             ]
             note_provider_metadata_drop_fields(unsupported)
         apply_processing_preference(target, kwargs)
-        return kwargs
+        return self._guard_payload_size(kwargs)
 
     def _normalize_remote_response(
         self,

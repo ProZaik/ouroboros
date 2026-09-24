@@ -666,10 +666,20 @@ def _read_file(
     max_lines: int = 2000,
     start_line: int = 1,
     start_char: int = 0,
+    end_line: Optional[int] = None,
+    end_char: Optional[int] = None,
     bucket: str = "",
     skill_name: str = "",
     _resolved_binding: ResolvedResourceBinding | None = None,
 ) -> str:
+    if end_line is not None:
+        try:
+            el = int(end_line)
+            sl = int(start_line)
+            if el >= sl:
+                max_lines = el - sl + 1
+        except (TypeError, ValueError):
+            pass
     # Reset first: a blocked or missing read must never inherit the previous
     # read's extent (the renderer fills `extent` only when it rendered).
     ctx.last_read_view = None

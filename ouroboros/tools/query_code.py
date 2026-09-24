@@ -138,7 +138,8 @@ def _inventory_rows(
     if op in {"symbols", "definition"}:
         for file, symbol in symbol_definitions(inventory, query, path=path, kind=kind or "any"):
             if _visible_file(ctx, repo_root, file.path, binding, secret_check):
-                rows.append(f"{file.path}:{symbol.line_start} {symbol.kind} {symbol.signature or symbol.name}")
+                span = f"{symbol.line_start}-{symbol.line_end}" if getattr(symbol, "line_end", None) and symbol.line_end > symbol.line_start else str(symbol.line_start)
+                rows.append(f"{file.path}:{span} {symbol.kind} {symbol.signature or symbol.name}")
     elif op == "references":
         for file, ref in symbol_references(inventory, query, path=path):
             if _visible_file(ctx, repo_root, file.path, binding, secret_check):

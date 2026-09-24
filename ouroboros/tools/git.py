@@ -1155,10 +1155,27 @@ def _publish_reviewed_commit(
 
 def _check_git_identity(repo_dir: str | pathlib.Path) -> Optional[str]:
     """Preflight check that git author identity is configured before invoking git commit."""
-    try:
-        run_cmd(["git", "var", "GIT_AUTHOR_IDENT"], cwd=str(repo_dir))
-        return None
-    except Exception:
+    name_ok = bool(os.environ.get("GIT_AUTHOR_NAME"))
+    email_ok = bool(os.environ.get("GIT_AUTHOR_EMAIL"))
+    if not (name_ok and email_ok):
+        try:
+            name = run_cmd(["git", "config", "user.name"], cwd=str(repo_dir)).strip()
+            name_ok = bool(name)
+        except Exception:
+            name_ok = False
+        try:
+            email = run_cmd(["git", "config", "user.email"], cwd=str(repo_dir)).strip()
+            email_ok = bool(email)
+        except Exception:
+            email_ok = False
+    if not (name_ok and email_ok):
+        try:
+            run_cmd(["git", "var", "GIT_AUTHOR_IDENT"], cwd=str(repo_dir))
+            name_ok = True
+            email_ok = True
+        except Exception:
+            pass
+    if not (name_ok and email_ok):
         convention = ""
         try:
             convention = run_cmd(["git", "log", "-1", "--format=%an <%ae>"], cwd=str(repo_dir)).strip()
@@ -1170,6 +1187,7 @@ def _check_git_identity(repo_dir: str | pathlib.Path) -> Optional[str]:
             f"in checkout '{repo_dir}'.{conv_text} Configure it before committing "
             "(e.g. `git config user.name '...'` and `git config user.email '...'`)."
         )
+    return None
 
 
 def _repo_commit_push(ctx: ToolContext, commit_message: str,
@@ -1186,17 +1204,24 @@ def _repo_commit_push(ctx: ToolContext, commit_message: str,
     _reset_commit_review_state(ctx)
     if paths is not None:
         if isinstance(paths, str):
-            return _publish_tool_result(
-                ctx,
-                ToolResult(
-                    status="error",
-                    code="TOOL_ARG_ERROR",
-                    text=(
-                        "⚠️ ERROR: paths must be a list of strings (e.g. ['path/to/file']), "
-                        "not a string or JSON-encoded string."
+            try:
+                parsed = json.loads(paths)
+                if isinstance(parsed, list) and all(isinstance(p, str) for p in parsed):
+                    paths = parsed
+                else:
+                    raise ValueError("not list of strings")
+            except Exception:
+                return _publish_tool_result(
+                    ctx,
+                    ToolResult(
+                        status="error",
+                        code="TOOL_ARG_ERROR",
+                        text=(
+                            "⚠️ ERROR: paths must be a list of strings (e.g. ['path/to/file']), "
+                            "not an invalid string or unparseable JSON string."
+                        ),
                     ),
-                ),
-            )
+                )
         if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
             return _publish_tool_result(
                 ctx,
@@ -1219,6 +1244,23 @@ def _repo_commit_push(ctx: ToolContext, commit_message: str,
                 text=identity_error,
             ),
         )
+    if paths:
+        import py_compile
+        for p in paths:
+            if str(p).endswith(".py"):
+                full_p = pathlib.Path(ctx.repo_dir) / p
+                if full_p.exists():
+                    try:
+                        py_compile.compile(str(full_p), doraise=True)
+                    except py_compile.PyCompileError as exc:
+                        return _publish_tool_result(
+                            ctx,
+                            ToolResult(
+                                status="error",
+                                code="PY_COMPILE_ERROR",
+                                text=f"⚠️ PY_COMPILE_ERROR: Syntax error in '{p}': {exc.msg}",
+                            ),
+                        )
     error = prepare_author_commit_request(ctx, review_reference, author_disposition, review_rebuttal)
     if error:
         return error

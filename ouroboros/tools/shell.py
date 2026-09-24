@@ -622,6 +622,35 @@ def _run_script(
     _body_start_ts = time.monotonic()
     executor_active = _executor_can_run_cwd(ctx, resolved_workdir)
     active_workspace_script = binding.root == "active_workspace"
+    if active_workspace_script and not outputs:
+        try:
+            from ouroboros.tools.shell_guards import writer_target_tokens
+            detected = writer_target_tokens([interp, "-c", body])
+            tracked_hits: List[str] = []
+            for t in detected:
+                tp = (resolved_workdir / t).resolve(strict=False)
+                try:
+                    rel = tp.relative_to(resolved_workdir.resolve(strict=False))
+                    rel_str = str(rel)
+                    if not rel_str.startswith(".ouroboros") and not rel_str.startswith(".git"):
+                        res = subprocess.run(
+                            ["git", "ls-files", "--error-unmatch", rel_str],
+                            cwd=str(resolved_workdir),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=2,
+                        )
+                        if res.returncode == 0:
+                            tracked_hits.append(rel_str)
+                except Exception:
+                    pass
+            if tracked_hits:
+                return (
+                    f"⚠️ PREFLIGHT_ERROR (run_script): script targets existing tracked workspace file(s) without declared outputs: "
+                    f"{', '.join(tracked_hits)}. Re-run run_script with outputs=[...] to declare expected outputs up front."
+                )
+        except Exception as exc:
+            log.warning("run_script write targets preflight error: %s", exc)
     if active_workspace_script:
         root = resolved_workdir / ".ouroboros" / "tmp_scripts"
     else:

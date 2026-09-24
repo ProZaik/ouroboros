@@ -769,6 +769,7 @@ def _build_candidate(
         "archive_rel": archive_rel,
         "source_sha256": source_sha256,
         "source_size_bytes": len(raw),
+        "compacted_size_bytes": 0,
         "source_row_count": len(records),
         "source_first_seq": int(records[0].get("seq") or 1),
         "source_last_seq": int(records[-1].get("seq") or len(records)),
@@ -780,6 +781,18 @@ def _build_candidate(
     for offset, row in enumerate(group_rows, start=2):
         row["seq"] = offset
     lines = [_dumps_row(header), *(_dumps_row(row) for row in group_rows), *retained_lines]
+    base_len = sum(len(l.encode("utf-8")) for l in lines) + len(lines)
+    header["compacted_size_bytes"] = base_len
+    line0 = _dumps_row(header)
+    diff = len(line0.encode("utf-8")) - len(lines[0].encode("utf-8"))
+    exact_len = base_len + diff
+    header["compacted_size_bytes"] = exact_len
+    line0 = _dumps_row(header)
+    if len(line0.encode("utf-8")) - len(lines[0].encode("utf-8")) != diff:
+        exact_len = base_len + (len(line0.encode("utf-8")) - len(lines[0].encode("utf-8")))
+        header["compacted_size_bytes"] = exact_len
+        line0 = _dumps_row(header)
+    lines[0] = line0
     candidate = ("\n".join(lines) + "\n").encode("utf-8")
 
     receipt = {
@@ -966,7 +979,9 @@ def _durable_growth_floor(root: pathlib.Path) -> Optional[int]:
         return None
     if not header:
         return None
-    size = header.get("source_size_bytes")
+    size = header.get("compacted_size_bytes")
+    if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+        size = header.get("source_size_bytes")
     if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
         return None
     return size
@@ -1017,7 +1032,7 @@ def maybe_compact_usage_ledger_locked(
     ):
         return False  # this process already ran a pass on these bytes
     floor = _durable_growth_floor(root)
-    if floor is not None and stat.st_size < floor + retry_growth:
+    if floor is not None and stat.st_size >= floor and stat.st_size < floor + retry_growth:
         return False  # somebody's pass read this ledger; it has not regrown since
     receipt: Optional[Dict[str, Any]] = None
     try:

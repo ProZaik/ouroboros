@@ -863,6 +863,21 @@ def _edit_text(
         )
         if match_error:
             return match_error
+        if target.suffix == ".py":
+            import ast
+            try:
+                ast.parse(new_text, filename=str(target))
+            except SyntaxError as exc:
+                orig_valid = True
+                try:
+                    ast.parse(text, filename=str(target))
+                except SyntaxError:
+                    orig_valid = False
+                if orig_valid:
+                    return (
+                        f"⚠️ EDIT_TEXT_ERROR: Edit introduces Python syntax error on line {exc.lineno}: {exc.msg}. "
+                        "The file was not modified. Check indentation and syntax of replacement text."
+                    )
         # Exact replace and full overwrite share the intentional-shrink contract.
         if (shrink := _check_data_shrink_guard(target, new_text, force)):
             return shrink
@@ -1221,7 +1236,14 @@ def _code_search(ctx: ToolContext, query: str, path: str = ".",
             "\n💡 HINT: query contains regex metacharacters (e.g. '|'). If you intended a regular expression search, pass regex=True: search_code(query=..., regex=True)."
             if not regex and bool(re.search(r"[|*+?{}^$()]", query)) else ""
         )
-        return f"No matches found for {'regex' if regex else 'literal'} `{query}` in {display_search_path} ({files_searched} files searched).{suffix}{restricted_note}{other_dropped_note}{cap_note}{deadline_note}{regex_hint}"
+        backlog_hint = ""
+        if normalized in ("active_workspace", "system_repo"):
+            if "backlog" in query.lower() or "improvement-backlog" in display_search_path.lower() or re.match(r"^ibl-[a-f0-9]+", query.strip()):
+                backlog_hint = (
+                    "\n💡 HINT: Backlog and runtime memory files reside under root=\"runtime_data\", path=\"memory/knowledge/improvement-backlog.md\". "
+                    "Re-run search_code with root=\"runtime_data\" or use read_file(root=\"runtime_data\", path=\"memory/knowledge/improvement-backlog.md\")."
+                )
+        return f"No matches found for {'regex' if regex else 'literal'} `{query}` in {display_search_path} ({files_searched} files searched).{suffix}{restricted_note}{other_dropped_note}{cap_note}{deadline_note}{regex_hint}{backlog_hint}"
 
     header = f"Found {len(matches)} match{'es' if len(matches) != 1 else ''} in {display_search_path} ({files_searched} files searched)"
     if files_capped:

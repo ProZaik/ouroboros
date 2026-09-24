@@ -587,11 +587,25 @@ def _user_files_binding_reaches_repo(ctx: Any, binding: Any) -> bool:
 
 
 def _binding_set_is_light_restricted(ctx: Any, binding: Any) -> bool:
-    """Whether light mode must treat this file/VCS target as internal state."""
+    """Whether light mode must treat this file/VCS target as internal state (ibl-9acda37171f2)."""
     items = _binding_items(binding)
+
+    def _is_memory_path(item: Any) -> bool:
+        tp = getattr(item, "target_path", None)
+        if tp:
+            try:
+                p = pathlib.Path(tp)
+                dr = pathlib.Path(getattr(ctx, "drive_root", ""))
+                if (dr / "memory").resolve() in p.resolve().parents or p.resolve() == (dr / "memory").resolve():
+                    return True
+            except Exception:
+                pass
+        rel = getattr(item, "path", "") or getattr(item, "relative_path", "")
+        return str(rel).startswith("memory/") or str(rel) == "memory"
+
     return bool(items) and all(
         _registry().binding_targets_system_repo(ctx, item)
-        or (item.root == "runtime_data" and item.source == "runtime_data")
+        or (item.root == "runtime_data" and item.source == "runtime_data" and not _is_memory_path(item))
         for item in items
     )
 
