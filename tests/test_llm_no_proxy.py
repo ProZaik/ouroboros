@@ -248,8 +248,12 @@ def test_chat_async_no_proxy_non_anthropic_uses_httpx_async_client():
     fake_oa_client.chat.completions.create = fake_create
 
     # Resolve SDK inheritance before substituting its HTTP base class.
+    from ouroboros.net_transport import _httpx_module
+
+    hx = _httpx_module()
     with patch("openai.AsyncOpenAI", return_value=fake_oa_client), \
          patch("httpx.AsyncClient", FakeAsyncClient), \
+         patch.object(hx, "AsyncClient", FakeAsyncClient), \
          patch("requests.get", side_effect=AssertionError("no_proxy must not use requests.get")):
         asyncio.run(
             client.chat_async(messages=messages, model=model, no_proxy=True)
@@ -482,3 +486,28 @@ def test_scope_review_call_scope_llm_uses_no_proxy(tmp_path):
         assert kw.get("no_proxy") is True, (
             f"scope_review._call_scope_llm sent without no_proxy=True: {kw}"
         )
+
+
+def test_make_no_proxy_client_timeout_coercion():
+    """make_no_proxy_client must coerce Timeout objects across httpx/httpx2 boundaries."""
+    import httpx
+    from ouroboros.net_transport import _coerce_timeout, _httpx_module, make_no_proxy_client
+
+    hx = _httpx_module()
+    legacy_timeout = httpx.Timeout(connect=30.0, read=120.0, write=120.0, pool=30.0)
+    coerced = _coerce_timeout(legacy_timeout, hx)
+    assert isinstance(coerced, hx.Timeout)
+    assert isinstance(coerced.connect, (int, float))
+    assert coerced.connect == 30.0
+    assert repr(coerced)  # Must not raise TypeError: unhashable type
+
+    target = {
+        "provider": "openai-compatible",
+        "base_url": "http://127.0.0.1:8318/v1",
+        "api_key": "sk-dummy",
+        "default_headers": {},
+    }
+    oa_client, http_client = make_no_proxy_client(target, legacy_timeout)
+    assert isinstance(http_client.timeout, hx.Timeout)
+    assert isinstance(http_client.timeout.connect, (int, float))
+

@@ -593,14 +593,15 @@ class _ProviderRoutingMixin:
 
     @staticmethod
     def _no_proxy_timeout(read_timeout: Optional[float] = None):
-        import httpx
         from ouroboros.config import get_llm_transport_read_timeout_sec
+        from ouroboros.net_transport import _httpx_module
 
+        hx = _httpx_module()
         read_write = (
             float(read_timeout) if read_timeout and read_timeout > 0
             else get_llm_transport_read_timeout_sec()
         )
-        return httpx.Timeout(connect=30.0, read=read_write, write=read_write, pool=30.0)
+        return hx.Timeout(connect=30.0, read=read_write, write=read_write, pool=30.0)
 
     @classmethod
     def _make_no_proxy_client(cls, target: Dict[str, Any], timeout: Optional[float] = None):

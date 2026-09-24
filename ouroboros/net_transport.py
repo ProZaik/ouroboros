@@ -135,6 +135,32 @@ def keepalive_http_client(async_client: bool = False):
         return None
 
 
+def _coerce_timeout(timeout: Any, hx: Any) -> Any:
+    """Ensure timeout object matches the underlying httpx/httpx2 implementation.
+
+    If an `httpx.Timeout` object from legacy httpx is passed to `httpx2` (or vice versa),
+    httpx2 will treat it as a single scalar value and assign the object itself
+    to connect/read/write/pool, leading to:
+    `TypeError: 'Timeout' object cannot be interpreted as an integer` when
+    socket.create_connection sets socket timeout.
+    """
+    if timeout is None:
+        return None
+    if isinstance(timeout, (int, float)):
+        return timeout
+    if hasattr(timeout, "connect") and hasattr(timeout, "read"):
+        try:
+            return hx.Timeout(
+                connect=getattr(timeout, "connect", None),
+                read=getattr(timeout, "read", None),
+                write=getattr(timeout, "write", None),
+                pool=getattr(timeout, "pool", None),
+            )
+        except Exception:
+            pass
+    return timeout
+
+
 def make_no_proxy_client(target: Dict[str, Any], timeout: Any) -> Tuple[Any, Any]:
     """Per-call OpenAI client fully isolated from proxy/SSL environment.
 
@@ -147,7 +173,7 @@ def make_no_proxy_client(target: Dict[str, Any], timeout: Any) -> Tuple[Any, Any
     http_client = hx.Client(
         trust_env=False,
         mounts={},
-        timeout=timeout,
+        timeout=_coerce_timeout(timeout, hx),
         transport=remote_httpx_transport(trust_env=False),
     )
     oa_client = OpenAI(
@@ -171,7 +197,7 @@ def make_no_proxy_async_client(target: Dict[str, Any], timeout: Any) -> Tuple[An
     http_client = hx.AsyncClient(
         trust_env=False,
         mounts={},
-        timeout=timeout,
+        timeout=_coerce_timeout(timeout, hx),
         transport=remote_httpx_transport(async_client=True, trust_env=False),
     )
     oa_client = AsyncOpenAI(

@@ -221,14 +221,18 @@ def _provider_specs(
 
     openai_api_key = str(settings.get("OPENAI_API_KEY", "") or "").strip()
     if openai_api_key:
+        openai_base_url = (
+            str(settings.get("OPENAI_BASE_URL", "") or "").strip()
+            or "https://api.openai.com/v1"
+        )
         specs.append((
             "openai",
-            lambda client: _fetch_openai_compatible_model_catalog(
+            lambda client, u=openai_base_url: _fetch_openai_compatible_model_catalog(
                 client,
                 "openai",
                 "OpenAI",
                 openai_api_key,
-                "https://api.openai.com/v1",
+                u,
             ),
         ))
 

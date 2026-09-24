@@ -63,10 +63,9 @@ def physical_dispatch_timeout(explicit: Any = None) -> Any:
     remaining = require_physical_dispatch_window()
     if remaining is None:
         return explicit
-    import httpx
-
-    if isinstance(explicit, httpx.Timeout):
-        return httpx.Timeout(**{
+    if hasattr(explicit, "as_dict") and callable(getattr(explicit, "as_dict")):
+        timeout_cls = type(explicit)
+        return timeout_cls(**{
             phase: remaining if value is None else min(value, remaining)
             for phase, value in explicit.as_dict().items()
         })
