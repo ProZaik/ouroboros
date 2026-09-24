@@ -12,7 +12,7 @@
 [![Linux](https://img.shields.io/badge/Linux-x86__64-orange.svg)](https://ouroboros-agent.ai/install/#linux)
 [![Windows](https://img.shields.io/badge/Windows-x64-blue.svg)][download-windows-x64]
 [![OuroborosHub](https://img.shields.io/badge/OuroborosHub-skills%20marketplace-8A2BE2.svg)](https://github.com/razzant/OuroborosHub)
-[![Version 7.4.11](https://img.shields.io/badge/version-7.4.11-green.svg)](VERSION)
+[![Version 7.4.12](https://img.shields.io/badge/version-7.4.12-green.svg)](VERSION)
 
 Ouroboros is an open-source, general-purpose AI agent whose identity, durable memory, and history continue across tasks and restarts. It works on external projects, coordinates a live swarm of specialist agents, and can rewrite the implementation it runs on, including its code, architecture, prompts, tools, and dependencies. Reflection can also change how it understands itself without severing that continuity.
 
@@ -66,13 +66,13 @@ The desktop packages already contain an optional CLI installer. On macOS, after 
 
 </details>
 
-[download-macos-arm64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/Ouroboros-7.4.11.dmg
-[download-windows-x64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/Ouroboros-7.4.11-windows-x64.zip
-[download-linux-deb-amd64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/ouroboros_7.4.11_amd64.deb
-[download-linux-rpm-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/ouroboros-7.4.11-1.x86_64.rpm
-[download-linux-rpm-red80-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/ouroboros-7.4.11-1.red80.x86_64.rpm
-[download-linux-appimage-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/Ouroboros-7.4.11-linux-x86_64.AppImage
-[download-linux-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.11/Ouroboros-7.4.11-linux-x86_64.tar.gz
+[download-macos-arm64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/Ouroboros-7.4.12.dmg
+[download-windows-x64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/Ouroboros-7.4.12-windows-x64.zip
+[download-linux-deb-amd64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/ouroboros_7.4.12_amd64.deb
+[download-linux-rpm-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/ouroboros-7.4.12-1.x86_64.rpm
+[download-linux-rpm-red80-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/ouroboros-7.4.12-1.red80.x86_64.rpm
+[download-linux-appimage-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/Ouroboros-7.4.12-linux-x86_64.AppImage
+[download-linux-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.12/Ouroboros-7.4.12-linux-x86_64.tar.gz
 
 Ouroboros bundles [Claudexor](https://github.com/razzant/claudexor) as its local execution layer for delegated coding and hosted-agent review. Ouroboros owns the task, memory, review, and final integration, while Claudexor runs the selected connected coding harness and returns durable execution evidence. [Explore Claudexor](https://claudexor.ai/).
 
@@ -452,6 +452,7 @@ and the reason.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 7.4.12 | 2026-09-24 | fix(release-sync): the README Version History row is a required carrier. `version_carrier_desyncs` and the release preflight no longer gate the row check behind the section header's own presence, so a README that drops `## Version History` now fails release sync instead of passing silently. |
 | 7.4.11 | 2026-09-24 | fix(context-fit): run the pre-dispatch capacity guard on every route, not only Nano. `_fit_output_payload` was invoked only when `context_mode == "nano"`, so owner-max routes dispatched with no fit check against their declared context window; the guard now runs for every route, and an unfit estimate fails closed before dispatch. |
 | 7.4.10 | 2026-09-23 | fix(evolution): preflight the target and steer at brief build — `build_evolution_task_text` now drops an owner steer whose named repo paths show no pending work at HEAD (STALE) and flags an objective whose target file a RUNNING task holds, so cycles stop re-minting landed work and stop colliding with live writers. Fails open on any probe error. |
 | 7.4.9 | 2026-09-22 | fix(evolution): name the failure reason in the consecutive-failure breaker. `evolution_task_failure_tracked` now records the failing `reason_code`, and the ≥3-failure pause notice names it, so the owner no longer restarts blind into the same dead route. |

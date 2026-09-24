@@ -535,6 +535,17 @@ class TestRunReleasePreflight:
         _, warnings = run_release_preflight(str(repo))
         assert warnings == []
 
+    def test_warns_when_version_history_header_missing(self, tmp_path):
+        # A README that drops the whole Version History section must warn,
+        # not silently skip the carrier check.
+        repo = _make_repo(tmp_path, "4.99.1")
+        readme = repo / "README.md"
+        text = readme.read_text()
+        text = text.replace("## Version History", "## Changelog")
+        readme.write_text(text, encoding="utf-8")
+        _, warnings = run_release_preflight(str(repo))
+        assert any("Version History" in w for w in warnings)
+
     def test_handles_missing_readme_gracefully(self, tmp_path):
         repo = _make_repo(tmp_path, "4.99.1")
         (repo / "README.md").unlink()
@@ -823,4 +834,23 @@ class TestReadmeVersionHistoryCarrier:
             "| 7.4.10 | 2026-09-23 | previous release |\n"
         )
         desync = version_carrier_desyncs("7.5.0", readme_text=readme, detailed=True)
+        assert not any("Version History" in d for d in desync)
+
+    def test_missing_version_history_header_is_reported(self):
+        # A README that drops the whole section must fail release sync, not
+        # silently skip the row check (the pre-fix behavior).
+        readme = (
+            "# Ouroboros\n\n"
+            "[![Version 7.5.0](https://img.shields.io/badge/version-7.5.0-green.svg)](VERSION)\n\n"
+            "## Changelog\n\n"
+            "| Version | Date | Description |\n"
+            "| 7.5.0 | 2026-09-23 | current release |\n"
+        )
+        desync = version_carrier_desyncs("7.5.0", readme_text=readme, detailed=True)
+        assert any("section header missing" in d for d in desync)
+
+    def test_absent_readme_text_skips_the_history_carrier(self):
+        # Absent readme_text (default "") is "not read", not "missing section":
+        # the carrier check must stay silent so unrelated desync probes work.
+        desync = version_carrier_desyncs("7.5.0", detailed=True)
         assert not any("Version History" in d for d in desync)

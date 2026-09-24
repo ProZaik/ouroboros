@@ -491,13 +491,20 @@ def version_carrier_desyncs(
         badge_token = f"version-{_shields_escape(version)}-green"
         if extract_readme_badge_version(readme_text) != version or badge_token not in readme_text:
             desync.append(f"README.md badge (expected {version} / {badge_token})" if detailed else "README.md badge")
-        if "## Version History" in readme_text:
-            row_re = re.compile(r'^\|\s*' + re.escape(version) + r'\s*\|', re.MULTILINE)
-            if not row_re.search(readme_text):
-                desync.append(
-                    f"README.md Version History (expected row for | {version} |)"
-                    if detailed else "README.md Version History"
-                )
+        row_re = re.compile(r'^\|\s*' + re.escape(version) + r'\s*\|', re.MULTILINE)
+        if "## Version History" not in readme_text:
+            # The section itself is a required carrier: a README without it
+            # must fail release sync, not silently skip the row check.
+            desync.append(
+                "README.md Version History (section header missing; expected "
+                f"## Version History with a row for | {version} |)"
+                if detailed else "README.md Version History"
+            )
+        elif not row_re.search(readme_text):
+            desync.append(
+                f"README.md Version History (expected row for | {version} |)"
+                if detailed else "README.md Version History"
+            )
     if arch_text and extract_architecture_header_version(arch_text) != version:
         desync.append(f"docs/ARCHITECTURE.md header (expected # Ouroboros v{version})" if detailed else "ARCHITECTURE.md header")
     # tests/test_gateway_parity.py pins this to VERSION, so it is a release
@@ -733,18 +740,24 @@ def run_release_preflight(repo_dir: str) -> Tuple[List[str], List[str]]:
                 r'^\|\s*' + re.escape(version) + r'\s*\|[^|]*\|([^|]+)\|?\s*$',
                 re.MULTILINE,
             )
-            m = row_re.search(readme_text)
-            if m:
-                claims = detect_numeric_claims(m.group(1))
-                if claims:
-                    warnings.append(
-                        f"Changelog row for {version} contains numeric claims that "
-                        f"may become stale: {claims!r}. Consider replacing with "
-                        f"descriptive language."
-                    )
-            elif "## Version History" in readme_text:
+            if "## Version History" not in readme_text:
                 warnings.append(
-                    f"README.md Version History is missing a row for version {version}."
+                    f"README.md Version History section header is missing; "
+                    f"expected a row for version {version}."
                 )
+            else:
+                m = row_re.search(readme_text)
+                if m:
+                    claims = detect_numeric_claims(m.group(1))
+                    if claims:
+                        warnings.append(
+                            f"Changelog row for {version} contains numeric claims that "
+                            f"may become stale: {claims!r}. Consider replacing with "
+                            f"descriptive language."
+                        )
+                else:
+                    warnings.append(
+                        f"README.md Version History is missing a row for version {version}."
+                    )
 
     return changed, warnings
