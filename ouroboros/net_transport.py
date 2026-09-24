@@ -16,6 +16,25 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 
+def _httpx_module():
+    """Detect whether OpenAI SDK binds to httpx2 or legacy httpx."""
+    try:
+        import openai
+
+        cls = getattr(openai, "DefaultHttpxClient", None)
+        if cls is not None:
+            for base in cls.__mro__:
+                if base.__module__.startswith("httpx2"):
+                    import httpx2
+
+                    return httpx2
+    except Exception:
+        pass
+    import httpx
+
+    return httpx
+
+
 def remote_httpx_transport(
     async_client: bool = False,
     *,
@@ -30,7 +49,7 @@ def remote_httpx_transport(
     never reaches ``create_ssl_context`` — the no-proxy clients pass
     ``trust_env=False`` to keep SSL_CERT_FILE/SSL_CERT_DIR env isolation.
     """
-    import httpx
+    hx = _httpx_module()
 
     from ouroboros.platform_layer import tcp_keepalive_socket_options
 
@@ -40,7 +59,7 @@ def remote_httpx_transport(
     }
     if limits is not None:
         kwargs["limits"] = limits
-    transport_cls = httpx.AsyncHTTPTransport if async_client else httpx.HTTPTransport
+    transport_cls = hx.AsyncHTTPTransport if async_client else hx.HTTPTransport
     try:
         return transport_cls(**kwargs)
     except TypeError:
@@ -60,9 +79,9 @@ def _sdk_pool_limits():
     downgrading the SDK's 1000/100 pool to the httpx 100/20 defaults — and a
     self-inflicted PoolTimeout would then read as a transport outage.
     """
-    import httpx
+    hx = _httpx_module()
 
-    return httpx.Limits(
+    return hx.Limits(
         max_connections=1000, max_keepalive_connections=100, keepalive_expiry=5.0
     )
 
@@ -122,10 +141,10 @@ def make_no_proxy_client(target: Dict[str, Any], timeout: Any) -> Tuple[Any, Any
     ``timeout`` is the caller's explicit per-call bound (an ``httpx.Timeout``
     or a float); no default is applied here.
     """
-    import httpx
+    hx = _httpx_module()
     from openai import OpenAI
 
-    http_client = httpx.Client(
+    http_client = hx.Client(
         trust_env=False,
         mounts={},
         timeout=timeout,
@@ -146,10 +165,10 @@ def make_no_proxy_async_client(target: Dict[str, Any], timeout: Any) -> Tuple[An
 
     ``timeout`` is the caller's explicit per-call bound, as above.
     """
-    import httpx
+    hx = _httpx_module()
     from openai import AsyncOpenAI
 
-    http_client = httpx.AsyncClient(
+    http_client = hx.AsyncClient(
         trust_env=False,
         mounts={},
         timeout=timeout,
