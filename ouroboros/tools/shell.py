@@ -352,6 +352,29 @@ def _run_shell(
             'Use ["sh", "-c", "your command"] if you need shell builtins.'
         )
 
+    if (pathlib.Path(cmd[0]).name.lower() if cmd else "") not in _SHELL_INTERPRETERS:
+        for idx, arg in enumerate(cmd):
+            if arg in {"|", "&&", "||", ">", ">>", "<"}:
+                if arg == "|" and idx > 0 and cmd[idx - 1] in ("-F", "-v"):
+                    continue
+                cmd_str = " ".join(shlex.quote(x) for x in cmd)
+                return (
+                    f'⚠️ SHELL_CMD_ERROR: unquoted shell metacharacter "{arg}" in cmd array cannot be '
+                    'executed directly via subprocess (run_command does not invoke a shell). '
+                    f'Wrap the command in a shell instead:\n'
+                    f'  run_command(cmd=["sh", "-c", {cmd_str!r}])'
+                )
+
+    if cwd:
+        cwd_str = str(cwd)
+        if any(marker in cwd_str for marker in ("｜DSML｜", "<｜DSML｜", "|DSML|", "<|DSML|")):
+            return (
+                "⚠️ TOOL_ARG_ERROR: cwd contains stray DSML model marker syntax ('｜DSML｜'). "
+                "Pass a clean directory path without model formatting tokens."
+            )
+        if cwd_str.endswith("｜"):
+            cwd = cwd_str.rstrip("｜ \t")
+
     cmd, autocorrect_note = _maybe_autocorrect_grep_backslash_pipe(cmd)
     regex_autocorrected = bool(autocorrect_note)
     autocorrect_note += _literal_argv_notes(cmd)

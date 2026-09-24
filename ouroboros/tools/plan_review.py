@@ -307,6 +307,15 @@ def _vacuous(name: str, value: object) -> bool:
     if value is None:
         return True
     if name == "spec":
+        if isinstance(value, str):
+            s = value.strip()
+            if s.startswith("{") and s.endswith("}"):
+                try:
+                    parsed = json.loads(s)
+                    if isinstance(parsed, dict):
+                        value = parsed
+                except Exception:
+                    pass
         return (isinstance(value, dict) and set(value) <= _SPEC_FIELDS
                 and all(member in (None, "", []) for member in value.values()))
     return isinstance(value, str) and not value.strip()
@@ -318,6 +327,15 @@ def _vacuous_disposition(value: object) -> bool:
     beside an EMPTY fingerprint names no wave and answers no finding, so it carries
     nothing either: without this a model that fills every schema key sent it with
     its first plan and looped on PLAN_REVIEW_DISPOSITION_MIXED_ENVELOPE (seen live)."""
+    if isinstance(value, str):
+        s = value.strip()
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, dict):
+                    value = parsed
+            except Exception:
+                pass
     if not isinstance(value, dict) or set(value) - {"review_fingerprint", "items", "author_disposition", "author_action"}:
         return False
     if value.get("author_action", "none") != "none":
@@ -342,6 +360,26 @@ def _argument_values(values: dict, names: Any) -> str:
 
 def _handle_plan_task(ctx: ToolContext, **params) -> str:
     raw_disposition = params.get("review_disposition")
+    if isinstance(raw_disposition, str):
+        s = raw_disposition.strip()
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, dict):
+                    raw_disposition = parsed
+            except Exception:
+                pass
+    raw_spec = params.get("spec")
+    if isinstance(raw_spec, str):
+        s = raw_spec.strip()
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, dict):
+                    raw_spec = parsed
+                    params["spec"] = raw_spec
+            except Exception:
+                pass
     # Explicit none disambiguates schema-filled author fields from the legacy finish form.
     # Normalize a copy: the caller's trace must retain the exact submitted arguments.
     if isinstance(raw_disposition, dict) and raw_disposition.get("author_action") == "none":
@@ -383,7 +421,7 @@ def _handle_plan_task(ctx: ToolContext, **params) -> str:
             "No plan attempt was recorded.",
         )
     request = _PlanRequest(
-        goal=str(params.get("goal") or ""), plan=str(params.get("plan") or ""), spec=params.get("spec"),
+        goal=str(params.get("goal") or ""), plan=str(params.get("plan") or ""), spec=raw_spec,
         reviewer_effort=params.get("reviewer_effort"),
     )
     try:  # the ToolEntry envelope is the outer settlement bound (plan_review_collect.run_plan_coroutine)

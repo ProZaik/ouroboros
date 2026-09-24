@@ -57,3 +57,18 @@ class _CaptureQueue:
 
     def put(self, item):
         self.items.append(item)
+
+
+def _evolution_test_ctx(tmp_path: pathlib.Path, **kwargs):
+    """Shared supervisor test context stub equipped with append_jsonl and event_queue."""
+    from types import SimpleNamespace
+    from ouroboros.utils import append_jsonl
+
+    defaults = {
+        "DRIVE_ROOT": tmp_path,
+        "REPO_DIR": tmp_path,
+        "append_jsonl": append_jsonl,
+        "event_queue": _CaptureQueue(),
+    }
+    defaults.update(kwargs)
+    return SimpleNamespace(**defaults)

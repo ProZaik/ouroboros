@@ -949,3 +949,26 @@ def test_a_wake_without_the_manifest_still_refuses_an_unaddressable_predecessor(
                                     predecessor_task_id="racer-old")
     assert refused.startswith("⚠️ AUTHORITY_SOURCE_UNAVAILABLE (promote_chat_to_task)")
     assert promoted.pending_events == []
+
+
+def test_context_renders_effective_runtime_mode_for_consciousness_task(tmp_path, monkeypatch):
+    """ibl-8ce8ff6d785e: context.py renders the EFFECTIVE runtime mode for a consciousness task
+    carrying runtime_mode_cap=light, so the disclosure cannot silently drift."""
+    from types import SimpleNamespace
+    from ouroboros.context import build_runtime_section
+
+    monkeypatch.setenv("OUROBOROS_RUNTIME_MODE", "advanced")
+    env = SimpleNamespace(repo_dir=tmp_path, drive_root=tmp_path)
+    task = {
+        "id": "t-conscious",
+        "type": "task",
+        "_is_direct_chat": False,
+        "metadata": {
+            "initiator": "consciousness",
+            "runtime_mode_cap": "light",
+            "consciousness_autonomy": "act",
+        },
+    }
+    rendered = build_runtime_section(env, task)
+    assert '"runtime_mode": "light"' in rendered
+    assert "light mode forbids Ouroboros repo mutation" in rendered

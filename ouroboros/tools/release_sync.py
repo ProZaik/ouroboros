@@ -687,6 +687,20 @@ def sync_release_metadata(repo_dir: str) -> List[str]:
 
 def check_history_limit(readme_text: str) -> List[str]:
     """Return advisory warnings when Version History exceeds P9 row limits."""
+    try:
+        p = Path(readme_text)
+        if p.exists():
+            if p.is_dir():
+                readme_file = p / "README.md"
+                if readme_file.exists():
+                    readme_text = readme_file.read_text(encoding="utf-8")
+                else:
+                    return ["skipped: directory has no README.md"]
+            elif p.is_file():
+                readme_text = p.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+
     warnings: List[str] = []
     major_rows, minor_rows, patch_rows = 0, 0, 0
 

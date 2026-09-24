@@ -73,9 +73,20 @@ def _deliverables_root() -> pathlib.Path:
 
 
 def normalize_root(root: str | None, *, default: ResourceRoot = "active_workspace") -> ResourceRoot:
-    candidate = str(root or default).strip() or default
+    raw_candidate = str(root or default).strip() or default
+    candidate = raw_candidate
+    stripped = candidate.rstrip("｜| \t\r\n")
+    if candidate not in _ALL_ROOTS and stripped in _ALL_ROOTS:
+        return stripped  # type: ignore[return-value]
     if candidate not in _ALL_ROOTS:
-        raise ValueError(f"unknown root {candidate!r}; expected one of {sorted(_ALL_ROOTS)}")
+        non_ascii = [ch for ch in candidate if ord(ch) > 127]
+        codepoints = f" (non-ASCII characters: {', '.join(f'U+{ord(c):04X} {c!r}' for c in non_ascii)})" if non_ascii else ""
+        suggestion = ""
+        import re as _re
+        cleaned = _re.sub(r"[^\w_]", "", candidate)
+        if cleaned in _ALL_ROOTS:
+            suggestion = f"; did you mean {cleaned!r}?"
+        raise ValueError(f"unknown root {candidate!r}; expected one of {sorted(_ALL_ROOTS)}{suggestion}{codepoints}")
     return candidate  # type: ignore[return-value]
 
 

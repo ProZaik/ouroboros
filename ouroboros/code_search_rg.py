@@ -10,6 +10,7 @@ import fnmatch
 import json
 import os
 import pathlib
+import re
 import shutil
 import stat
 import subprocess
@@ -313,10 +314,11 @@ def format_search_result(
                       if result.files_selected is not None else "")
     rendered = [f"{root_name}:{m.path.relative_to(root_path).as_posix()}:{m.line}: {m.text}" for m in matches]
     if not rendered:
-        # Surface the file-scan cap, the deadline, AND the filter receipt here: a
-        # capped/timed-out/filtered huge-root search with zero matches must never
-        # look like a clean "no matches" (the misleading case).
-        return f"No matches found for {'regex' if regex else 'literal'} `{query}` in {display_path} (ripgrep).{selection_note}{cap_note}{deadline_note}{dropped_note}"
+        regex_hint = (
+            "\n💡 HINT: query contains regex metacharacters (e.g. '|'). If you intended a regular expression search, pass regex=True: search_code(query=..., regex=True)."
+            if not regex and bool(re.search(r"[|*+?{}^$()]", query)) else ""
+        )
+        return f"No matches found for {'regex' if regex else 'literal'} `{query}` in {display_path} (ripgrep).{selection_note}{cap_note}{deadline_note}{dropped_note}{regex_hint}"
     header = f"Found {len(rendered)} match{'es' if len(rendered) != 1 else ''} in {display_path} (ripgrep)"
     header += selection_note
     if truncated:

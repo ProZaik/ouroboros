@@ -65,7 +65,6 @@ PROVIDER_PREFIXES: tuple[tuple[str, str], ...] = (
     ("gigachat::", "gigachat"),
     ("deepseek::", "deepseek"),
     ("openai-compatible::", "openai-compatible"),
-    ("agy::", "agy"),
     ("openrouter::", "openrouter"),
 )
 
@@ -76,7 +75,6 @@ PROVIDER_ENV_KEYS: dict[str, str] = {
     "minimax": "MINIMAX_API_KEY",
     "cloudru": "CLOUDRU_FOUNDATION_MODELS_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
-    "agy": "AGY_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
 }
 
@@ -110,9 +108,6 @@ PROVIDER_CREDENTIAL_GROUPS: dict[str, tuple[str, ...]] = {
     "openai-compatible": (
         "OPENAI_COMPATIBLE_API_KEY", "OPENAI_COMPATIBLE_BASE_URL",
         "OPENAI_API_KEY", "OPENAI_BASE_URL",
-    ),
-    "agy": (
-        "AGY_API_KEY", "AGY_BASE_URL",
     ),
     "local": (),
     # The owned engine holds credentials; no control token reaches model settings/env.
@@ -153,6 +148,14 @@ def provider_for_model(model: str) -> str:
     for prefix, provider in PROVIDER_PREFIXES:
         if name.startswith(prefix):
             return provider
+    if "::" in name:
+        prefix = name.split("::", 1)[0] + "::"
+        if prefix == "agy::":
+            raise ValueError(
+                f"Provider prefix 'agy::' is retired (agy is a session harness, not a direct API provider). "
+                f"Use 'openai-compatible::{name[len(prefix):]}' for the AGY bridge."
+            )
+        raise ValueError(f"Unknown provider prefix {prefix!r} in model id {name!r}")
     return "openrouter"
 
 

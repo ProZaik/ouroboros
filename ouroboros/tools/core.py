@@ -217,7 +217,7 @@ def _str_match_replace(
         if old_lines and lines:
             import difflib
             best_idx = None
-            best_ratio = 0.5
+            best_ratio = 0.75 if len(old_str.strip()) <= 8 else 0.5
             n_old = max(1, len(old_lines))
             # 1. Block-level sliding window matching (handles multi-line edits robustly)
             normalized_old = old_str.replace("\r\n", "\n")
@@ -249,7 +249,8 @@ def _str_match_replace(
                             break
                     if best_idx is not None:
                         break
-                    matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=0.6)
+                    cutoff = 0.8 if len(target_line) <= 5 else 0.6
+                    matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=cutoff)
                     if matches:
                         file_idx = stripped_lines.index(matches[0])
                         best_idx = max(0, file_idx - old_idx)
@@ -1216,7 +1217,11 @@ def _code_search(ctx: ToolContext, query: str, path: str = ".",
     if not matches:
         suffix = f" {protected_omitted} protected artifact file(s) omitted." if protected_omitted else ""
         cap_note = f" Scan stopped after {_MAX_SEARCH_FILES_SCANNED} files — narrow the path or glob." if files_capped else ""
-        return f"No matches found for {'regex' if regex else 'literal'} `{query}` in {display_search_path} ({files_searched} files searched).{suffix}{restricted_note}{other_dropped_note}{cap_note}{deadline_note}"
+        regex_hint = (
+            "\n💡 HINT: query contains regex metacharacters (e.g. '|'). If you intended a regular expression search, pass regex=True: search_code(query=..., regex=True)."
+            if not regex and bool(re.search(r"[|*+?{}^$()]", query)) else ""
+        )
+        return f"No matches found for {'regex' if regex else 'literal'} `{query}` in {display_search_path} ({files_searched} files searched).{suffix}{restricted_note}{other_dropped_note}{cap_note}{deadline_note}{regex_hint}"
 
     header = f"Found {len(matches)} match{'es' if len(matches) != 1 else ''} in {display_search_path} ({files_searched} files searched)"
     if files_capped:

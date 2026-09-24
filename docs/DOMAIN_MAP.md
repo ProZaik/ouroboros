@@ -25,10 +25,10 @@ The manifest is the SSOT of the module→domain assignment (1:1, complete over t
 | D15 | Memory, knowledge, consciousness & self-evolution | 21 | 0 |
 | D16 | Observability, usage accounting & cost | 11 | 0 |
 | D17 | Projects, workspaces & task results | 21 | 0 |
-| D18 | Launcher, packaging, platform & shared substrate | 14 | 0 |
+| D18 | Launcher, packaging, platform & shared substrate | 33 | 0 |
 | D19 | Frozen contracts (ABI) | 10 | 0 |
 | D20 | Presence | 10 | 0 |
-| **total** | | **556** | **0** |
+| **total** | | **575** | **0** |
 
 ## Dependency direction matrix (strict, pinned)
 
@@ -761,10 +761,29 @@ No function body (≥ 10 normalized lines) is shared verbatim across domains. Ne
 - `ouroboros/launcher_windows_runtime.py`
 - `ouroboros/markdown_source.py`
 - `ouroboros/node_runtime.py`
+- `ouroboros/ouroboros_cli/__init__.py`
+- `ouroboros/ouroboros_cli/cli.py`
+- `ouroboros/ouroboros_cli/commands/__init__.py`
+- `ouroboros/ouroboros_cli/commands/dispatcher.py`
+- `ouroboros/ouroboros_cli/commands/handlers.py`
+- `ouroboros/ouroboros_cli/config.py`
+- `ouroboros/ouroboros_cli/models/__init__.py`
+- `ouroboros/ouroboros_cli/models/contracts.py`
+- `ouroboros/ouroboros_cli/models/state.py`
+- `ouroboros/ouroboros_cli/repl.py`
+- `ouroboros/ouroboros_cli/transport/__init__.py`
+- `ouroboros/ouroboros_cli/transport/client.py`
+- `ouroboros/ouroboros_cli/transport/websocket.py`
+- `ouroboros/ouroboros_cli/ui/__init__.py`
+- `ouroboros/ouroboros_cli/ui/ansi.py`
+- `ouroboros/ouroboros_cli/ui/markdown.py`
+- `ouroboros/ouroboros_cli/ui/prompt.py`
+- `ouroboros/ouroboros_cli/ui/widgets.py`
 - `ouroboros/packaged_cli.py`
 - `ouroboros/packaged_cli_install.py`
 - `ouroboros/platform_layer.py`
 - `ouroboros/reference_books.py`
+- `ouroboros/tree_sitter_compat.py`
 - `ouroboros/utils.py`
 - `ouroboros/verified_download.py`
 

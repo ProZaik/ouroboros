@@ -399,6 +399,58 @@ def _maybe_inject_nanny_economics_reminder(
     return True
 
 
+def rounds_since_last_mutative_call(llm_trace: Optional[Dict[str, Any]], current_round: int) -> int:
+    """Number of rounds since the last successful mutating tool call in this task.
+    If no mutation has occurred, returns current_round."""
+    if not llm_trace:
+        return current_round
+    rows = [r for r in llm_trace.get("tool_calls", []) if isinstance(r, dict)]
+    last_mutation_round = 0
+    for r in rows:
+        tool = str(r.get("tool") or "")
+        if tool in {"edit_text", "write_file", "apply_patch", "commit_reviewed"} and not r.get("is_error"):
+            r_idx = r.get("round_idx")
+            if r_idx is not None and isinstance(r_idx, int):
+                last_mutation_round = max(last_mutation_round, r_idx)
+            else:
+                last_mutation_round = current_round
+    return max(0, current_round - last_mutation_round)
+
+
+def _maybe_inject_evolution_deadline(
+    round_idx: int,
+    messages: List[Dict[str, Any]],
+    accumulated_usage: Dict[str, Any],
+    *,
+    llm_trace: Optional[Dict[str, Any]] = None,
+    task_type: str = "",
+) -> bool:
+    """Inject a decide-or-abstain deadline for self-evolution tasks after 10+ non-mutating rounds."""
+    if task_type != "evolution" or round_idx < 10:
+        return False
+    if accumulated_usage.get("_last_evolution_deadline_round") == round_idx:
+        return False
+    rows = [r for r in (llm_trace or {}).get("tool_calls", []) if isinstance(r, dict)]
+    mutations = [
+        r for r in rows
+        if str(r.get("tool") or "") in {"edit_text", "write_file", "apply_patch", "commit_reviewed"}
+        and not r.get("is_error")
+    ]
+    if mutations:
+        return False
+    accumulated_usage["_last_evolution_deadline_round"] = round_idx
+    notice = (
+        f"[DECIDE-OR-ABSTAIN DEADLINE — round {round_idx}]\n"
+        "This self-evolution cycle has run for 10+ rounds without any code or file mutations.\n"
+        "Reconnaissance is exhausted. You MUST now either:\n"
+        "1. Perform the intended code change via `edit_text` or `write_file` and commit with `commit_reviewed`, OR\n"
+        "2. Conclude this cycle with an explicit, honest NO_OP / ABSTAIN explanation.\n"
+        "Do not continue read-only exploration without making a decision."
+    )
+    _loop()._append_or_merge_user_message(messages, notice)
+    return True
+
+
 def _inject_round_checkpoints(
     *,
     round_idx: int,
@@ -413,6 +465,7 @@ def _inject_round_checkpoints(
     budget_remaining_usd: Optional[float] = None,
     cost_ceiling: Optional["task_pacing.CostCeiling"] = None,
     llm_trace: Optional[Dict[str, Any]] = None,
+    task_type: str = "",
 ) -> bool:
     """Inject the per-round self-check and the time-budget / intrinsic-pacing
     milestone AFTER owner messages, so the checkpoint is the LLM-call tail (a
@@ -437,7 +490,10 @@ def _inject_round_checkpoints(
         round_idx, messages, tools, emit_progress,
         event_queue=event_queue, task_id=task_id, drive_logs=drive_logs,
     )
-    return bool(checkpoint or time_budget or cost_budget or nanny_economics)
+    evolution_deadline = _maybe_inject_evolution_deadline(
+        round_idx, messages, accumulated_usage, llm_trace=llm_trace, task_type=task_type,
+    )
+    return bool(checkpoint or time_budget or cost_budget or nanny_economics or evolution_deadline)
 
 
 def _forced_delegation_note(tools_ctx: Any, llm_trace: Dict[str, Any]) -> str:

@@ -306,8 +306,6 @@ class _ProviderRoutingMixin:
             return f"deepseek/{resolved_model}"
         if provider == "claudexor":
             return f"claudexor::{resolved_model}"
-        if provider == "agy":
-            return f"agy/{resolved_model}"
         return f"openai-compatible/{resolved_model}"
 
     def _resolve_remote_target(
@@ -332,20 +330,6 @@ class _ProviderRoutingMixin:
                 "usage_model": usage_model, "api_key": "", "default_headers": {},
                 # A locality fact only; real daemon discovery never uses this URL.
                 "base_url": "http://127.0.0.1", "supports_openrouter_extensions": False,
-                "supports_generation_cost": False,
-            }
-
-        if provider == "agy":
-            base_url = (configured("AGY_BASE_URL", "") or "").strip() or "http://127.0.0.1:8317/v1"
-            api_key = (configured("AGY_API_KEY", "") or "").strip() or "sk-antigravity"
-            return {
-                "provider": provider,
-                "resolved_model": resolved_model,
-                "usage_model": usage_model,
-                "api_key": api_key,
-                "base_url": base_url,
-                "default_headers": {},
-                "supports_openrouter_extensions": False,
                 "supports_generation_cost": False,
             }
 

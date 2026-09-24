@@ -804,7 +804,7 @@ def _origin_already_routed(ctx: ToolContext, client_message_id: str) -> bool:
     )
 
 
-def _steer_task(ctx: ToolContext, task_id: str, message: str) -> str:
+def _steer_task(ctx: ToolContext, task_id: str = "", message: str = "", **kwargs) -> str:
     """Deliver a message to a host-listed RUNNING/PENDING independent root.
 
     Who speaks decides how the message travels (``_routing_issuer``). An OWNER
@@ -928,16 +928,27 @@ def _steer_task(ctx: ToolContext, task_id: str, message: str) -> str:
         if detail:
             confirmation += f"\n\n[ATTACHMENTS]\n{detail}\n[END_ATTACHMENTS]"
         return confirmation
-    return _steer_refusal_text(target, mode, receipt)
+    return _steer_refusal_text(target, mode, receipt, ctx=ctx)
 
 
-def _steer_refusal_text(target: str, mode: str, receipt: Dict[str, Any]) -> str:
+def _steer_refusal_text(target: str, mode: str, receipt: Dict[str, Any], ctx: Optional[ToolContext] = None) -> str:
     """The typed refusal/unconfirmed sentence for one steer receipt."""
     status = str(receipt.get("status") or "unconfirmed")
     if status in {"rejected", "needs_manual_target"}:
+        reason = str(receipt.get("reason") or "target_not_steerable")
+        extra = ""
+        if reason == "target_unknown" and ctx is not None:
+            try:
+                from ouroboros.task_status import load_effective_task_result
+                import pathlib
+                res = load_effective_task_result(pathlib.Path(ctx.drive_root), target)
+                if res and res.get("status"):
+                    extra = f"; task {target} already ended with status '{res.get('status')}'"
+            except Exception:
+                pass
         return (
             f"⚠️ STEER_REJECTED: task {target} was not steered "
-            f"({str(receipt.get('reason') or 'target_not_steerable')})."
+            f"({reason}{extra})."
         )
     # Only "no receipt exists yet" reaches here: a settled refusal is returned
     # above with its reason, so UNCONFIRMED never disguises a known rejection.

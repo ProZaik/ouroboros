@@ -16,8 +16,23 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 
+import httpx
+
+_ORIG_HTTPX_TRANSPORT = getattr(httpx, "HTTPTransport", None)
+_ORIG_ASYNC_HTTPX_TRANSPORT = getattr(httpx, "AsyncHTTPTransport", None)
+_ORIG_HTTPX_CLIENT = getattr(httpx, "Client", None)
+_ORIG_ASYNC_HTTPX_CLIENT = getattr(httpx, "AsyncClient", None)
+
+
 def _httpx_module():
     """Detect whether OpenAI SDK binds to httpx2 or legacy httpx."""
+    if (
+        httpx.HTTPTransport is not _ORIG_HTTPX_TRANSPORT
+        or httpx.AsyncHTTPTransport is not _ORIG_ASYNC_HTTPX_TRANSPORT
+        or httpx.Client is not _ORIG_HTTPX_CLIENT
+        or httpx.AsyncClient is not _ORIG_ASYNC_HTTPX_CLIENT
+    ):
+        return httpx
     try:
         import openai
 
@@ -30,9 +45,9 @@ def _httpx_module():
                     return httpx2
     except Exception:
         pass
-    import httpx
 
     return httpx
+
 
 
 def remote_httpx_transport(

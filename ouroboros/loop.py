@@ -574,7 +574,8 @@ def run_llm_loop(
                 _inject_round_checkpoints(
                     round_idx=round_idx, max_rounds=MAX_ROUNDS, messages=messages, accumulated_usage=accumulated_usage,
                     emit_progress=emit_progress, tools=tools, event_queue=event_queue, task_id=task_id,
-                    drive_logs=drive_logs, budget_remaining_usd=budget_remaining_usd, cost_ceiling=cost_ceiling, llm_trace=llm_trace)
+                    drive_logs=drive_logs, budget_remaining_usd=budget_remaining_usd, cost_ceiling=cost_ceiling, llm_trace=llm_trace,
+                    task_type=task_type)
 
                 messages, _compaction_usage = _run_round_compaction(
                     messages,
@@ -813,6 +814,8 @@ from ouroboros.loop_nudges import (  # noqa: E402, F401 -- intentional public re
     _maybe_inject_time_budget_milestone,
     _maybe_inject_cost_budget_milestone,
     _maybe_inject_nanny_economics_reminder,
+    _maybe_inject_evolution_deadline,
+    rounds_since_last_mutative_call,
     _inject_round_checkpoints,
     _forced_delegation_note,
     _nanny_finalization_message,

@@ -1153,6 +1153,25 @@ def _publish_reviewed_commit(
     return _publish_post_commit_test_fact(ctx, result + ci_note, test_warning)
 
 
+def _check_git_identity(repo_dir: str | pathlib.Path) -> Optional[str]:
+    """Preflight check that git author identity is configured before invoking git commit."""
+    try:
+        run_cmd(["git", "var", "GIT_AUTHOR_IDENT"], cwd=str(repo_dir))
+        return None
+    except Exception:
+        convention = ""
+        try:
+            convention = run_cmd(["git", "log", "-1", "--format=%an <%ae>"], cwd=str(repo_dir)).strip()
+        except Exception:
+            pass
+        conv_text = f" Existing commit identity convention: '{convention}'." if convention else ""
+        return (
+            f"⚠️ GIT_IDENTITY_MISSING: Git user identity (user.name and user.email) is not configured "
+            f"in checkout '{repo_dir}'.{conv_text} Configure it before committing "
+            "(e.g. `git config user.name '...'` and `git config user.email '...'`)."
+        )
+
+
 def _repo_commit_push(ctx: ToolContext, commit_message: str,
                        paths: Optional[List[str]] = None,
                        skip_tests: bool = False,
@@ -1165,6 +1184,41 @@ def _repo_commit_push(ctx: ToolContext, commit_message: str,
     """Stage, review, and commit files with unified pre-commit review."""
     skip_advisory_pre_review = bool(skip_advisory_review or skip_advisory_pre_review)
     _reset_commit_review_state(ctx)
+    if paths is not None:
+        if isinstance(paths, str):
+            return _publish_tool_result(
+                ctx,
+                ToolResult(
+                    status="error",
+                    code="TOOL_ARG_ERROR",
+                    text=(
+                        "⚠️ ERROR: paths must be a list of strings (e.g. ['path/to/file']), "
+                        "not a string or JSON-encoded string."
+                    ),
+                ),
+            )
+        if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
+            return _publish_tool_result(
+                ctx,
+                ToolResult(
+                    status="error",
+                    code="TOOL_ARG_ERROR",
+                    text=(
+                        f"⚠️ ERROR: paths must be a list of strings (e.g. ['path/to/file']), "
+                        f"got {type(paths).__name__}."
+                    ),
+                ),
+            )
+    identity_error = _check_git_identity(ctx.repo_dir)
+    if identity_error:
+        return _publish_tool_result(
+            ctx,
+            ToolResult(
+                status="error",
+                code="TOOL_ARG_ERROR",
+                text=identity_error,
+            ),
+        )
     error = prepare_author_commit_request(ctx, review_reference, author_disposition, review_rebuttal)
     if error:
         return error

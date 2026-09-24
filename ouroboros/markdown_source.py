@@ -111,7 +111,26 @@ def _frontmatter(raw: bytes) -> tuple[Mapping[str, Any] | None, int]:
     offset = len(lines[0]) + 1
     for line in lines[1:]:
         if line.rstrip(b"\r") in (b"---", b"..."):
-            value = yaml.safe_load(raw[len(lines[0]) + 1:offset].decode("utf-8"))
+            fm_text = raw[len(lines[0]) + 1:offset].decode("utf-8")
+            try:
+                value = yaml.safe_load(fm_text)
+            except yaml.YAMLError:
+                # Recover from unquoted colon-space in summary or plain scalars
+                recovered = []
+                import re as _re
+                for fline in fm_text.splitlines():
+                    m = _re.match(r"^([a-zA-Z0-9_-]+:\s+)(.+)$", fline)
+                    if m:
+                        prefix, val = m.group(1), m.group(2).strip()
+                        if ": " in val and not val.startswith(('"', "'", ">", "|")):
+                            val_escaped = val.replace('"', '\\"')
+                            recovered.append(f'{prefix}"{val_escaped}"')
+                            continue
+                    recovered.append(fline)
+                try:
+                    value = yaml.safe_load("\n".join(recovered))
+                except Exception:
+                    raise
             if value is not None and not isinstance(value, dict):
                 raise ValueError("Markdown frontmatter must be a YAML mapping")
             return value or {}, min(len(raw), offset + len(line) + 1)
