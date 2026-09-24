@@ -29,6 +29,18 @@ def _events():
 log = logging.getLogger(__name__)
 
 
+def _evolution_failure_route(event: Dict[str, Any]) -> str:
+    """Route of the model attempt that ended an evolution task ('' when unknown).
+
+    Named by the consecutive-failure breaker so a paused campaign says WHICH route
+    died instead of only the reason code.
+    """
+    me = event.get("model_execution")
+    if not isinstance(me, dict):
+        return ""
+    return str(me.get("used_model") or me.get("requested_model") or "")
+
+
 def _handle_evolution_task_done(
     ctx: Any,
     *,
@@ -138,6 +150,7 @@ def _handle_evolution_task_done(
         def _bump_failures(live: Dict[str, Any]) -> None:
             failures_box["n"] = int(live.get("evolution_consecutive_failures") or 0) + 1
             live["evolution_consecutive_failures"] = failures_box["n"]
+            live["evolution_last_failure_route"] = _evolution_failure_route(task_done_event)
             live['evolution_last_failure_reason'] = str(((axes.get('execution') or {}).get('reason_code')) or ((axes.get('lifecycle') or {}).get('reason_code')) or ((axes.get('execution') or {}).get('status')) or 'unknown')
 
         update_state(_bump_failures)
@@ -146,6 +159,7 @@ def _handle_evolution_task_done(
             {
                 "ts": utc_now_iso(),
                 "type": "evolution_task_failure_tracked",
+                "route": _evolution_failure_route(task_done_event),
                 'reason_code': str(((axes.get('execution') or {}).get('reason_code')) or ((axes.get('lifecycle') or {}).get('reason_code')) or ((axes.get('execution') or {}).get('status')) or 'unknown'),
                 "task_id": task_id,
                 "consecutive_failures": failures_box.get("n", 0),

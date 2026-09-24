@@ -402,3 +402,111 @@ def test_rejected_terminal_does_not_consume_global_evolution_state(tmp_path, mon
     assert live["post_task_autostop"] is True
     assert live["evolution_consecutive_failures"] == 4
     assert checkpoints == []
+
+
+def test_evolution_failure_route_reads_model_execution():
+    from supervisor.events_evolution_done import _evolution_failure_route
+
+    assert _evolution_failure_route(
+        {"model_execution": {"used_model": "openai-compatible::deepseek-reasoner"}}
+    ) == "openai-compatible::deepseek-reasoner"
+    assert _evolution_failure_route(
+        {"model_execution": {"requested_model": "agy::gemini-3.8-flash-high"}}
+    ) == "agy::gemini-3.8-flash-high"
+    assert _evolution_failure_route(
+        {"model_execution": {"used_model": "used::m", "requested_model": "req::m"}}
+    ) == "used::m"
+    assert _evolution_failure_route({"model_execution": None}) == ""
+    assert _evolution_failure_route({"model_execution": "not-a-dict"}) == ""
+    assert _evolution_failure_route({}) == ""
+
+
+def test_failure_tracker_records_route_for_the_breaker(tmp_path, monkeypatch):
+    """A failed evolution terminal must record WHICH route died, not only the reason."""
+    from supervisor import evolution_lifecycle, state
+    from supervisor.events import _handle_evolution_task_done
+
+    state.init(tmp_path)
+    state.update_state(lambda live: live.update(
+        evolution_mode_enabled=True,
+        post_task_autostop=True,
+        evolution_consecutive_failures=0,
+    ))
+    monkeypatch.setattr(
+        evolution_lifecycle,
+        "update_evolution_campaign_after_task",
+        lambda *_a, **_k: {
+            "accepted": True, "persisted": True, "replay": False,
+            "reason": "", "transaction": {"transaction_id": "live"},
+        },
+    )
+    monkeypatch.setattr(
+        "ouroboros.evolution_checkpoints.append_evolution_checkpoint",
+        lambda *_a, **_k: None,
+    )
+    ctx = SimpleNamespace(
+        DRIVE_ROOT=tmp_path, REPO_DIR=tmp_path, append_jsonl=lambda *_a, **_k: None
+    )
+    task = {"metadata": {"evolution_transaction": {"transaction_id": "live"}}}
+
+    _handle_evolution_task_done(
+        ctx,
+        evt={},
+        task_id="live",
+        task=task,
+        task_done_event={
+            "status": "failed",
+            "model_execution": {"used_model": "openai-compatible::deepseek-reasoner"},
+        },
+        outcome_axes={"execution": {"status": "failed"}},
+        cost=1.0,
+        rounds=1,
+    )
+
+    live = state.load_state()
+    assert live["evolution_consecutive_failures"] == 1
+    assert live["evolution_last_failure_route"] == "openai-compatible::deepseek-reasoner"
+
+
+def test_failure_route_stays_empty_when_producer_omits_it(tmp_path, monkeypatch):
+    """No model_execution on the terminal means no route is invented."""
+    from supervisor import evolution_lifecycle, state
+    from supervisor.events import _handle_evolution_task_done
+
+    state.init(tmp_path)
+    state.update_state(lambda live: live.update(
+        evolution_mode_enabled=True,
+        post_task_autostop=True,
+        evolution_consecutive_failures=0,
+    ))
+    monkeypatch.setattr(
+        evolution_lifecycle,
+        "update_evolution_campaign_after_task",
+        lambda *_a, **_k: {
+            "accepted": True, "persisted": True, "replay": False,
+            "reason": "", "transaction": {"transaction_id": "live"},
+        },
+    )
+    monkeypatch.setattr(
+        "ouroboros.evolution_checkpoints.append_evolution_checkpoint",
+        lambda *_a, **_k: None,
+    )
+    ctx = SimpleNamespace(
+        DRIVE_ROOT=tmp_path, REPO_DIR=tmp_path, append_jsonl=lambda *_a, **_k: None
+    )
+    task = {"metadata": {"evolution_transaction": {"transaction_id": "live"}}}
+
+    _handle_evolution_task_done(
+        ctx,
+        evt={},
+        task_id="live",
+        task=task,
+        task_done_event={"status": "failed"},
+        outcome_axes={"execution": {"status": "failed"}},
+        cost=1.0,
+        rounds=1,
+    )
+
+    live = state.load_state()
+    assert live["evolution_consecutive_failures"] == 1
+    assert live["evolution_last_failure_route"] == ""
