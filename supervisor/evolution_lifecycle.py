@@ -1451,6 +1451,17 @@ def _evolution_target_preflight(objective: str, steer: str) -> tuple:
     """
     try:
         note_parts = []
+        from ouroboros.backlog_classifier import _PROJECT_REGEX
+        if _PROJECT_REGEX.search(objective or ""):
+            note_parts.append(
+                'Objective targets an external project repo (e.g. stand-appsec-pipeline) '
+                'instead of Ouroboros core (system_repo). Self-evolution may only target Ouroboros itself. '
+                'Abstain or take an honest no-op to avoid cross-repo corruption.'
+            )
+            objective = (
+                f'{objective}\n\n[PREFLIGHT: Objective targets an external project repo, not Ouroboros core. '
+                'Self-evolution must not touch external project files. Pick an Ouroboros improvement or an honest no-op.]'
+            )
         busy = _evolution_preflight_objective_busy(objective)
         if busy:
             note_parts.append(

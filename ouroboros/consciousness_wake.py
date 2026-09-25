@@ -247,6 +247,23 @@ def render_wake_message(drive_root: Any, repo_dir: Any, *, reason: str, last_wak
         "spent_usd": spent, "daily_usd": f"{float(daily_usd):.2f}",
         "running": str(int(running)), "max_tasks": str(int(max_tasks)), "interval": str(int(interval)),
     }
-    # One pass: a fact (a task title inside {events}) that happens to contain "{daily_usd}"
-    # is never substituted again.
-    return re.sub(r"\{(\w+)\}", lambda m: facts.get(m.group(1), m.group(0)), template)
+    rendered = re.sub(r"\{(\w+)\}", lambda m: facts.get(m.group(1), m.group(0)), template)
+    try:
+        from ouroboros.config import get_symbiotic_mode_enabled, get_symbiotic_target_project
+        if get_symbiotic_mode_enabled():
+            target_project = get_symbiotic_target_project()
+            from ouroboros.improvement_backlog import format_backlog_digest
+            project_backlog = format_backlog_digest(drive_root, limit=5, project_id=target_project)
+            symbiotic_section = [
+                "",
+                "## Symbiotic Evolution Mode: Target Project",
+                f"- target_project: {target_project}",
+                "- role: Autonomous Principal AppSec / Systems Engineer for this project",
+                "- mission: Continuously evolve, repair, test and improve the target project autonomously.",
+            ]
+            if project_backlog:
+                symbiotic_section.extend(["", project_backlog])
+            rendered += "\n".join(symbiotic_section)
+    except Exception:
+        pass
+    return rendered

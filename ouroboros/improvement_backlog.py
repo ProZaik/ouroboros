@@ -22,7 +22,14 @@ _BACKLOG_PREAMBLE = (
 _DEFAULT_BACKLOG_TEXT = f"{_BACKLOG_TITLE}\n\n{_BACKLOG_PREAMBLE}\n"
 
 
-def backlog_path(drive_root: Any) -> pathlib.Path:
+def backlog_path(drive_root: Any, project_id: str = "") -> pathlib.Path:
+    from ouroboros.project_facts import sanitize_project_id
+    pid = sanitize_project_id(project_id)
+    if pid:
+        p = pathlib.Path(drive_root)
+        if p.name == pid and (p.parent.name == "projects" or "projects" in p.parts):
+            return p / "knowledge" / f"{BACKLOG_TOPIC}.md"
+        return p / "projects" / pid / "knowledge" / f"{BACKLOG_TOPIC}.md"
     return pathlib.Path(drive_root) / BACKLOG_REL_PATH
 
 
@@ -43,8 +50,8 @@ def _locked_text_file(path: pathlib.Path, mode: str, *, shared: bool = False) ->
         fh.close()
 
 
-def ensure_backlog_file(drive_root: Any) -> pathlib.Path:
-    path = backlog_path(drive_root)
+def ensure_backlog_file(drive_root: Any, project_id: str = "") -> pathlib.Path:
+    path = backlog_path(drive_root, project_id=project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     with _locked_text_file(path, mode="a+") as fh:
         fh.seek(0)
@@ -92,8 +99,8 @@ def _parse_backlog_items(text: str) -> List[Dict[str, str]]:
     return items
 
 
-def load_backlog_items(drive_root: Any) -> List[Dict[str, str]]:
-    path = backlog_path(drive_root)
+def load_backlog_items(drive_root: Any, project_id: str = "") -> List[Dict[str, str]]:
+    path = backlog_path(drive_root, project_id=project_id)
     if not path.exists():
         return []
     with _locked_text_file(path, mode="r", shared=True) as fh:
@@ -282,7 +289,7 @@ def _semantic_redirect_fingerprints(
     return out
 
 
-def append_backlog_items(drive_root: Any, items: List[Dict[str, Any]]) -> int:
+def append_backlog_items(drive_root: Any, items: List[Dict[str, Any]], project_id: str = "") -> int:
     """Add/refresh backlog items. Recurrence (A): a repeat of an existing item is
     NOT dropped — its ``count`` and ``last_seen`` are bumped in place (and a
     previously-closed item re-opens). Priority/kind (B/D) are persisted. A reworded
@@ -291,7 +298,7 @@ def append_backlog_items(drive_root: Any, items: List[Dict[str, Any]]) -> int:
     if not items:
         return 0
 
-    path = ensure_backlog_file(drive_root)
+    path = ensure_backlog_file(drive_root, project_id=project_id)
     items = _semantic_redirect_fingerprints(drive_root, path, items)
     with _locked_text_file(path, mode="r+") as fh:
         existing_text = fh.read()
@@ -420,10 +427,10 @@ def merge_backlog_text(drive_root: Any, text: str) -> int:
     return append_backlog_items(drive_root, fresh)
 
 
-def close_backlog_items(drive_root: Any, *, task_id: Any = None, ids: Any = None) -> int:
+def close_backlog_items(drive_root: Any, *, task_id: Any = None, ids: Any = None, project_id: str = "") -> int:
     """Close-on-commit (C): flip matching open items to ``status: done`` with a
     ``closed_at`` stamp. Match by originating ``task_id`` and/or explicit ``ids``."""
-    path = backlog_path(drive_root)
+    path = backlog_path(drive_root, project_id=project_id)
     if not path.exists():
         return 0
     want_task = str(task_id or "").strip()
@@ -453,8 +460,8 @@ def close_backlog_items(drive_root: Any, *, task_id: Any = None, ids: Any = None
     return closed
 
 
-def format_backlog_digest(drive_root: Any, *, limit: int = 5, max_chars: int = 2500) -> str:
-    items = [item for item in load_backlog_items(drive_root) if item.get("status", "open") == "open"]
+def format_backlog_digest(drive_root: Any, *, limit: int = 5, max_chars: int = 2500, project_id: str = "") -> str:
+    items = [item for item in load_backlog_items(drive_root, project_id=project_id) if item.get("status", "open") == "open"]
     if not items:
         return ""
 
@@ -528,7 +535,7 @@ def _needs_verbatim_grooming(item: Dict[str, Any]) -> bool:
     return False
 
 
-def groom_backlog(drive_root: Any, *, cap: int = _GROOM_CAP) -> int:
+def groom_backlog(drive_root: Any, *, cap: int = _GROOM_CAP, project_id: str = "") -> int:
     """D: best-effort LLM grooming of AUTO-generated (fingerprinted) backlog items —
     merge near-dupes, mark resolved, re-rank, cap to <=cap. Hand-added items and
     fingerprinted blocks with unmodelled bytes pass through UNCHANGED. Runs on a
@@ -536,7 +543,7 @@ def groom_backlog(drive_root: Any, *, cap: int = _GROOM_CAP) -> int:
     the number written, or 0 on a bad/empty/oversized reply or concurrent change."""
     import json as _json
 
-    path = backlog_path(drive_root)
+    path = backlog_path(drive_root, project_id=project_id)
     if not path.exists():
         return 0
     try:

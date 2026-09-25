@@ -185,6 +185,8 @@ def _run_post_task_processing_async(
                 if is_presence_task(task_snapshot):
                     return
                 # Project facts stay scoped; generic process lessons remain global.
+                if _pid:
+                    _update_project_improvement_backlog(env, reflection_entry, project_id=_pid)
                 _update_improvement_backlog(env, reflection_entry)
                 try:
                     from ouroboros.post_task_evolution import maybe_promote
@@ -371,9 +373,12 @@ def _run_global_backlog_promotion_only(
     if not reflection_entry:
         return
     try:
+        from ouroboros.backlog_classifier import is_system_improvement_candidate
+
         candidates = [
             item for item in (reflection_entry.get("backlog_candidates") or [])
             if isinstance(item, dict) and str(item.get("summary") or "").strip()
+            and is_system_improvement_candidate(item, task)
         ]
         if not candidates:
             return
@@ -1283,6 +1288,7 @@ def build_review_context(env: Any) -> str:
 from ouroboros.post_task_synthesis import (  # noqa: E402, F401 -- intentional public re-exports
     build_trace_summary,
     _update_improvement_backlog,
+    _update_project_improvement_backlog,
     _apply_reflection_memory_actions,
     _child_task_evidence,
     _pre_synthesis_usage_snapshot,

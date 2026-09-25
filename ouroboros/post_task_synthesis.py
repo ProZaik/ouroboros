@@ -283,6 +283,42 @@ def _update_improvement_backlog(
         return 0
 
 
+def _update_project_improvement_backlog(
+    env: Any,
+    reflection_entry: Dict[str, Any] | None,
+    project_id: str,
+) -> int:
+    """Persist project-specific backlog candidates into the project's durable backlog."""
+    if not project_id:
+        return 0
+    try:
+        from ouroboros.config import DATA_DIR
+        from ouroboros.improvement_backlog import append_backlog_items, groom_backlog
+        from ouroboros.backlog_classifier import is_system_improvement_candidate
+
+        all_candidates = list((reflection_entry or {}).get("backlog_candidates") or [])
+        project_candidates = [
+            c for c in all_candidates
+            if isinstance(c, dict) and str(c.get("summary") or "").strip()
+            and not is_system_improvement_candidate(c, {"project_id": project_id})
+        ]
+        if not project_candidates:
+            return 0
+        canonical_data = getattr(env, "budget_drive_root", None) or DATA_DIR
+        added = append_backlog_items(canonical_data, project_candidates, project_id=project_id)
+        try:
+            groom_backlog(canonical_data, project_id=project_id)
+        except Exception as error:
+            propagate_model_error(error)
+            log.debug("Project backlog grooming failed", exc_info=True)
+        return added
+    except Exception as error:
+        propagate_model_error(error)
+        log.debug("Project improvement backlog update failed", exc_info=True)
+        return 0
+
+
+
 def _apply_reflection_memory_actions(
     env: Any,
     reflection_entry: Dict[str, Any] | None,

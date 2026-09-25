@@ -183,6 +183,12 @@ SETTINGS_DEFAULTS = {**UPDATE_SETTINGS_DEFAULTS,
     # Optional owner steer appended to each evolution cycle's objective (never
     # overrides the LLM-first promotion). Empty = pure LLM choice.
     "OUROBOROS_EVOLUTION_PERSISTENT_OBJECTIVE": "",
+    # Symbiotic Evolution Mode: Ouroboros autonomously acts as an engineer on a
+    # target project (e.g. stand-appsec-pipeline) while segregating project defects
+    # from its own self-evolution loop.
+    "OUROBOROS_SYMBIOTIC_MODE": "false",
+    "OUROBOROS_SYMBIOTIC_TARGET_PROJECT": "stand-appsec-pipeline",
+    "OUROBOROS_SYMBIOTIC_CADENCE": "active",
     "OUROBOROS_WEBSEARCH_MODEL": "gpt-5.2",
     # web_search backend pin: auto (default OpenAI-first cascade) | ddgs (pure
     # retrieval, no second LLM — for fixed-model runs) | openai | openrouter | anthropic.

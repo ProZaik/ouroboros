@@ -336,6 +336,31 @@ def get_evolution_persistent_objective() -> str:
     ) or "").strip()
 
 
+def get_symbiotic_mode_enabled() -> bool:
+    """Is symbiotic evolution mode enabled? Default False."""
+    raw = str(runtime_setting(
+        "OUROBOROS_SYMBIOTIC_MODE",
+        SETTINGS_DEFAULTS.get("OUROBOROS_SYMBIOTIC_MODE", "false"),
+    ) or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def get_symbiotic_target_project() -> str:
+    """Target project for symbiotic evolution mode."""
+    return str(runtime_setting(
+        "OUROBOROS_SYMBIOTIC_TARGET_PROJECT",
+        SETTINGS_DEFAULTS.get("OUROBOROS_SYMBIOTIC_TARGET_PROJECT", "stand-appsec-pipeline"),
+    ) or "").strip()
+
+
+def get_symbiotic_cadence() -> str:
+    """Cadence for symbiotic evolution (e.g. 'active', 'idle', 'off')."""
+    return str(runtime_setting(
+        "OUROBOROS_SYMBIOTIC_CADENCE",
+        SETTINGS_DEFAULTS.get("OUROBOROS_SYMBIOTIC_CADENCE", "active"),
+    ) or "").strip().lower()
+
+
 def get_allow_mutative_subagents(write_surface: str = "") -> bool:
     """Whether the parent may spawn mutative (acting) subagents.
 

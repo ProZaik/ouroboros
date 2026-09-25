@@ -38,8 +38,13 @@ def _address(ctx: ToolContext, topic: str, scope: str = "") -> knowledge_store.K
     if not isinstance(scope, str):
         raise ValueError("scope must be global or project:<exact project id>")
     sanitized = _sanitize_topic(topic)
+    project = str(getattr(ctx, "project_id", "") or "")
+    is_project_scoped = bool(project or scope.startswith("project:"))
     if sanitized in GLOBAL_ONLY_TOPICS:
-        return knowledge_store.resolve_knowledge_address(_backlog_root(ctx), sanitized, "global")
+        if sanitized == BACKLOG_TOPIC and is_project_scoped and scope != "global":
+            pass
+        else:
+            return knowledge_store.resolve_knowledge_address(_backlog_root(ctx), sanitized, "global")
     project = str(getattr(ctx, "project_id", "") or "")
     root = _backlog_root(ctx)
     if not getattr(ctx, "budget_drive_root", "") and (project or scope.startswith("project:")):
