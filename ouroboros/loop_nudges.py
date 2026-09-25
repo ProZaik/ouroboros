@@ -543,6 +543,10 @@ def _maybe_inject_evolution_crux_directive(
         "repository before any other reconnaissance. If the crux resolves the "
         "objective as already-satisfied or falsified, close it with proof and "
         "exit; otherwise move straight to plan_task and the edit.\n"
+        "When a byte-exact window decides the edit (the anchor you will write "
+        "against), pin it with compact_context(inspect=true) and keep its unit "
+        "IDs and source refs — a bridge compaction can evict raw bytes from "
+        "this window, but a pinned view survives it.\n"
         "Do not end a cycle with a final answer that narrates an intended "
         "search your tool trace does not contain — narration is not a tool call."
     )

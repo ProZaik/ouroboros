@@ -67,3 +67,17 @@ def test_crux_directive_states_policy_not_a_host_rejection_path():
     )
     content = messages[0]["content"]
     assert "Do not end a cycle with a final answer that narrates an intended" in content
+
+
+def test_crux_directive_states_pinning_policy_for_byte_exact_windows():
+    """The directive must state the pinning policy (ibl-360c392c6836): a
+    byte-exact recon window that decides the edit is pinned via
+    compact_context(inspect=true) rather than held as raw bytes that bridge
+    compaction can evict."""
+    messages = []
+    _maybe_inject_evolution_crux_directive(
+        1, messages, {}, task_type="evolution",
+    )
+    content = messages[0]["content"]
+    assert "compact_context(inspect=true)" in content
+    assert "pin" in content.lower()
