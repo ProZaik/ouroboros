@@ -293,6 +293,7 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "file": "path",
         "file_path": "path",
         "filename": "path",
+        "name": "skill_name",
     },
     "write_file": {
         "file": "path",
