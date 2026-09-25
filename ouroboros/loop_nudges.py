@@ -507,6 +507,49 @@ def _maybe_inject_plan_review_directive(
     return True
 
 
+def _maybe_inject_evolution_crux_directive(
+    round_idx: int,
+    messages: List[Dict[str, Any]],
+    accumulated_usage: Dict[str, Any],
+    task_type: str = "",
+) -> bool:
+    """Inject a one-shot round-1 [CRUX-FIRST] directive for evolution cycles.
+
+    The objective behind this nudge (ibl-934c652d5e18) asks that a
+    self-evolution cycle's FIRST tool call be a literal-string search for the
+    crux marker the objective names. The host cannot know that marker without
+    parsing the objective's prose, which BIBLE P5 forbids; so the host states
+    the POLICY and the LLM owns the search term. The sister half of that
+    objective ("reject a final_message that asserts an intended search without
+    a matching tool call") is a prose classifier over the final answer and is
+    P5-falsified — not implemented.
+
+    Fires once, at the first round, only for ``task_type == "evolution"``. The
+    latch lives in ``accumulated_usage`` beside the deadline/plan-review
+    latches, so a fresh task starts unset and a requeue starts clean.
+    """
+    if task_type != "evolution":
+        return False
+    if round_idx > 1:
+        return False
+    if accumulated_usage.get("_last_evolution_crux_directive_round") is not None:
+        return False
+    accumulated_usage["_last_evolution_crux_directive_round"] = round_idx
+    directive = (
+        "[CRUX-FIRST]\n"
+        "Your FIRST tool call this cycle must be a literal-string search for the "
+        "crux marker the objective names (the symbol, file, or phrase whose "
+        "truth decides whether the work is possible). Locate that marker in the "
+        "repository before any other reconnaissance. If the crux resolves the "
+        "objective as already-satisfied or falsified, close it with proof and "
+        "exit; otherwise move straight to plan_task and the edit.\n"
+        "Do not end a cycle with a final answer that narrates an intended "
+        "search your tool trace does not contain — narration is not a tool call."
+    )
+    _loop()._append_or_merge_user_message(messages, directive)
+    return True
+
+
 def _inject_round_checkpoints(
     *,
     round_idx: int,
@@ -552,7 +595,10 @@ def _inject_round_checkpoints(
     plan_directive = _maybe_inject_plan_review_directive(
         round_idx, messages, accumulated_usage, llm_trace=llm_trace,
     )
-    return bool(checkpoint or time_budget or cost_budget or nanny_economics or evolution_deadline or plan_directive)
+    crux_directive = _maybe_inject_evolution_crux_directive(
+        round_idx, messages, accumulated_usage, task_type=task_type,
+    )
+    return bool(checkpoint or time_budget or cost_budget or nanny_economics or evolution_deadline or plan_directive or crux_directive)
 
 
 def _forced_delegation_note(tools_ctx: Any, llm_trace: Dict[str, Any]) -> str:
