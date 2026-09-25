@@ -447,6 +447,9 @@ def _normalize_tool_call_args(entry: "ToolEntry", args: dict[str, Any]) -> None:
             args[canonical] = args.pop(alias)
     if tool_name in _IGNORE_ROOT_ARG_TOOLS and "root" in args and "root" not in accepted:
         args.pop("root", None)
+    if tool_name in ("promote_chat_to_task", "route_to_project") and "predecessor_task_id" in accepted:
+        if "predecessor_task_id" not in args or args.get("predecessor_task_id") is None:
+            args["predecessor_task_id"] = ""
 
 
 def _prepare_public_builtin_args(entry: "ToolEntry", args: dict[str, Any]) -> str:
