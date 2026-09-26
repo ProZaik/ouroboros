@@ -142,6 +142,23 @@ def _resolve_declared_output(
     text = str(raw_item or "").strip()
     if not text:
         return None, "empty output path"
+    # A declared output may name its resource root explicitly as
+    # "<root>:<relative path>" (e.g. "task_drive:report.json").  Resolve the
+    # named root and rebase the relative remainder onto it, so a declared
+    # task_drive output is looked for where the command actually wrote it
+    # instead of as a literal file named "task_drive:report.json" -- which
+    # can never exist, and so raised ARTIFACT_OUTPUT_ERROR on exit-0 commands
+    # whose output was physically present.  An unknown or unresolvable root
+    # falls through unchanged: the colon is then part of the path, as before.
+    declared_root, _, declared_tail = text.partition(":")
+    if declared_root and declared_tail:
+        try:
+            declared_root_path = resource_root_path(ctx, declared_root)
+        except Exception:
+            declared_root_path = None
+        if declared_root_path is not None:
+            work_dir = str(declared_root_path)
+            text = declared_tail
     raw = pathlib.Path(text).expanduser()
     executor_ref = executor_ref_from_ctx(ctx)
     if executor_ref is not None and is_absolute_path_text(text) and not text.startswith("~"):

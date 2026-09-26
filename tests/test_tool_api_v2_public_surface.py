@@ -209,6 +209,32 @@ def _registry_under_fake_home(tmp_path, monkeypatch):
     return registry, repo, data, desktop
 
 
+def test_run_command_declared_task_drive_output_no_false_failure(tmp_path, monkeypatch):
+    """A declared "<root>:<path>" output that was physically produced must not
+    raise ARTIFACT_OUTPUT_ERROR.  Regression pin for the false failure where
+    ``task_drive:probe_out.txt`` was resolved as a literal filename, so an
+    exit-0 command whose output really existed was reported as missing."""
+    monkeypatch.setattr("ouroboros.safety.check_safety", lambda *a, **k: (True, ""))
+    registry, repo, data, desktop = _registry_under_fake_home(tmp_path, monkeypatch)
+
+    drive = pathlib.Path(registry._ctx.task_drive_root())
+    drive.mkdir(parents=True, exist_ok=True)
+
+    result = registry.execute(
+        "run_command",
+        {
+            "cmd": ["python3", "-c", "open('probe_out.txt','w').write('probe')"],
+            "cwd": str(drive),
+            "outputs": ["task_drive:probe_out.txt"],
+        },
+    )
+
+    assert "ARTIFACT_OUTPUT_ERROR" not in result, result
+    assert "missing output" not in result, result
+    assert (drive / "probe_out.txt").read_text(encoding="utf-8") == "probe"
+    assert (data / "task_results" / "artifacts" / "task1" / "probe_out.txt").exists(), result
+
+
 def test_user_files_root_is_public_and_task_artifact_audited(tmp_path, monkeypatch):
     from ouroboros.artifacts import collect_task_artifact_records
 
