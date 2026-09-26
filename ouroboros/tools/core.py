@@ -291,6 +291,76 @@ def _str_match_replace(
     return text.replace(old_str, new_str, 1), None
 
 
+def _derive_refreshed_anchor(text: str, old_str: str) -> Optional[str]:
+    """Derive an auto-refreshed byte-exact anchor from the target text when old_str
+    was paraphrased or corrupted by summary compaction (ibl-05a306fdb5c9 / A5).
+
+    Returns a unique single-occurrence candidate substring from `text` with >=0.55 similarity,
+    or None if no unique unambiguous match exists.
+    """
+    if not text or not old_str or old_str in text:
+        return None
+
+    import difflib
+
+    lines = text.splitlines(keepends=True)
+    old_lines = [l for l in old_str.splitlines(keepends=True) if l.strip()]
+    if not old_lines or not lines:
+        return None
+
+    n_old = max(1, len(old_lines))
+    normalized_old = old_str.replace("\r\n", "\n")
+    matcher = difflib.SequenceMatcher(None, normalized_old, "")
+    best_idx = None
+    best_ratio = 0.60
+
+    # 1. Block-level sliding window
+    for idx in range(0, max(1, len(lines) - n_old + 1)):
+        window = "".join(lines[idx:idx + n_old]).replace("\r\n", "\n")
+        matcher.set_seq2(window)
+        if matcher.quick_ratio() >= best_ratio:
+            ratio = matcher.ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_idx = idx
+
+    # 2. Line-level fallback for single-line or distinctive targets
+    if best_idx is None:
+        stripped_lines = [l.strip() for l in lines]
+        candidate_queries = sorted(
+            [(i, l.strip()) for i, l in enumerate(old_lines) if len(l.strip()) >= 3],
+            key=lambda x: len(x[1]),
+            reverse=True,
+        )
+        if candidate_queries:
+            for old_idx, target_line in candidate_queries:
+                for file_idx, line in enumerate(stripped_lines):
+                    if target_line in line or line == target_line:
+                        best_idx = max(0, file_idx - old_idx)
+                        break
+                if best_idx is not None:
+                    break
+                matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=0.7)
+                if matches:
+                    file_idx = stripped_lines.index(matches[0])
+                    best_idx = max(0, file_idx - old_idx)
+                    break
+
+    if best_idx is None:
+        return None
+
+    candidate = "".join(lines[best_idx:best_idx + n_old])
+    if not old_str.endswith(("\n", "\r\n")) and candidate.endswith(("\n", "\r\n")):
+        candidate = candidate.rstrip("\r\n")
+
+    if candidate and text.count(candidate) == 1:
+        sim = difflib.SequenceMatcher(None, candidate, old_str).ratio()
+        if sim >= 0.50:
+            return candidate
+
+    return None
+
+
 def _check_data_shrink_guard(
     target: pathlib.Path, new_content: str, force: bool = False
 ) -> "str | None":
@@ -861,6 +931,15 @@ def _edit_text(
         new_text, match_error = _str_match_replace(
             text, old_str, new_str, _root_display_path(normalized, path), "EDIT_TEXT_ERROR"
         )
+        if match_error:
+            refreshed = _derive_refreshed_anchor(text, old_str)
+            if refreshed and refreshed != old_str:
+                retry_text, retry_err = _str_match_replace(
+                    text, refreshed, new_str, _root_display_path(normalized, path), "EDIT_TEXT_ERROR"
+                )
+                if not retry_err:
+                    new_text = retry_text
+                    match_error = None
         if match_error:
             return match_error
         if target.suffix == ".py":

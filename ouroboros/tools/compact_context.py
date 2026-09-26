@@ -29,13 +29,28 @@ def record_context_view(ctx, messages, tool_schemas) -> None:
     }
 
 
+def invalidate_read_view_coverage(ctx: Any, reason: str = "compaction", keep_unit_ids: Sequence[str] = ()) -> None:
+    """Invalidate read-view coverage and anchor bytes across bridge/context compaction (ibl-6478b63b33aa, ibl-faf24b1ec26c)."""
+    if ctx is None:
+        return
+    seen = getattr(ctx, "_read_file_seen", None)
+    if isinstance(seen, dict):
+        seen.clear()
+    ctx._read_coverage_stale = True
+    ctx._read_coverage_invalidation_reason = reason
+
+
 def _compact_context(ctx, keep_last_n: int | None = None, *, inspect: bool = False,
                      expected_view_revision: str = "", working_note: str | None = None,
                      keep_unit_ids: List[str] | None = None, restore_unit_refs: List[dict] | None = None,
-                     schema_names: List[str] | None = None, **kwargs) -> str:
+                     schema_names: List[str] | None = None, pin_unit_ids: List[str] | None = None, **kwargs) -> str:
     """Inspect or queue a replacement through the existing context materializer."""
     from ouroboros.context_compaction import _atomic_units
     from ouroboros.tools.tool_result import ToolResult, _publish_tool_result
+
+    if pin_unit_ids is not None:
+        ctx._pinned_unit_ids = tuple(pin_unit_ids)
+    pinned = list(getattr(ctx, "_pinned_unit_ids", ()))
 
     if inspect:
         observed = getattr(ctx, "_last_context_observation", None)
@@ -43,14 +58,17 @@ def _compact_context(ctx, keep_last_n: int | None = None, *, inspect: bool = Fal
             return _publish_tool_result(ctx, ToolResult(status="error", code="TOOL_REPORTED_FAILURE",
                 text="Context view unavailable: this actor has no recorded model-send observation yet."))
         ctx._inspected_context_view = observed
-        return json.dumps({
+        res = {
             "view_revision": observed["revision"],
             "units": [{"unit_id": unit.unit_id, "raw_sha256": unit.raw_sha256,
                        "estimated_tokens": unit.context_size_tokens, "source_refs": unit.source_refs}
                       for unit in _atomic_units(observed["messages"])],
             "schema_names": [s["function"]["name"] for s in observed["tool_schemas"]],
             "rule": "This revision names the observed messages; schemas are listed separately. Select complete unit IDs to keep, write one working_note, and preserve original sources. Newer owner/tool messages remain untouched.",
-        }, ensure_ascii=False)
+        }
+        if pinned:
+            res["pinned_unit_ids"] = pinned
+        return json.dumps(res, ensure_ascii=False)
     if working_note is not None:
         # This invocation is a response to the actor's recorded physical send.
         # The host already owns that causal binding; echoing its hash is only
@@ -72,9 +90,14 @@ def _compact_context(ctx, keep_last_n: int | None = None, *, inspect: bool = Fal
                     or not all(isinstance(ref, dict) for ref in restore_unit_refs))):
             return _publish_tool_result(ctx, ToolResult(status="error", code="TOOL_ARG_ERROR",
                 text="Invalid context view request: use a prose working_note, arrays of exact unit/schema names and checkpoint reference objects."))
-        if keep_unit_ids is None and keep_last_n is not None:
+        if keep_unit_ids is not None:
+            if pinned:
+                keep_unit_ids = list(dict.fromkeys(list(keep_unit_ids) + pinned))
+        elif keep_last_n is not None:
             count = max(2, min(keep_last_n, 20))
             keep_unit_ids = [unit.unit_id for unit in _atomic_units(observed["messages"])[-count:]]
+            if pinned:
+                keep_unit_ids = list(dict.fromkeys(keep_unit_ids + pinned))
         ctx._pending_compaction = {
             "observed": observed, "working_note": working_note,
             "expected_view_revision": observed["revision"],
@@ -120,6 +143,7 @@ def get_tools() -> List[ToolEntry]:
                         "expected_view_revision": {"type": "string", "description": "Optional view_revision from inspect, checked exactly. Omitted binds the actual model-send view that produced this call; inspect is not required to replace all completed units."},
                         "working_note": {"type": "string", "description": "One coherent account of current understanding, corrections and unresolved work. Supplying it selects your authored view; omission keeps legacy helper compaction."},
                         "keep_unit_ids": {"type": "array", "items": {"type": "string"}, "description": "Exact inspected complete units to retain raw; takes precedence over keep_last_n, empty keeps none. If both selectors are omitted, an authored note keeps all. Owner/system messages and newer tail are preserved."},
+                        "pin_unit_ids": {"type": "array", "items": {"type": "string"}, "description": "Specific unit IDs holding anchor windows to pin BEFORE further reads so they are preserved across compactions (ibl-360c392c6836)."},
                         "restore_unit_refs": {"type": "array", "items": {"type": "object", "properties": {
                             "checkpoint_ref": {"type": "object"}, "unit_id": {"type": "string"}, "raw_sha256": {"type": "string"}},
                             "required": ["checkpoint_ref", "unit_id", "raw_sha256"]},

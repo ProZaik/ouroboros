@@ -1058,6 +1058,8 @@ def _classify_pass_result(
     parallel: bool,
     agent_python: str = "python3",
     elapsed: float = 0.0,
+    discriminate_baseline: bool = True,
+    baseline: Optional[frozenset[str]] = None,
 ) -> Optional[str]:
     """Turn one pass's exit code + output into ``None`` or a bounded diagnosis.
 
@@ -1097,6 +1099,30 @@ def _classify_pass_result(
                 _crash_remediation(output),
                 "\n".join(matched) + "\n\n" + output, max_output,
             )
+
+    if discriminate_baseline:
+        from ouroboros.preflight_baseline import KNOWN_PREFLIGHT_FAILURES, discriminate_failures, parse_failed_test_ids
+
+        failed_ids = parse_failed_test_ids(output)
+        if failed_ids:
+            new_failures, baseline_debt = discriminate_failures(
+                failed_ids, baseline=baseline if baseline is not None else KNOWN_PREFLIGHT_FAILURES
+            )
+            if not new_failures:
+                # No new breakage: only known baseline debt was present
+                return None
+            remediation_lines = [
+                f"NEW FAILURES ({len(new_failures)}):",
+                *(f"- {tid}" for tid in new_failures),
+            ]
+            if baseline_debt:
+                remediation_lines.extend([
+                    "",
+                    f"BASELINE DEBT ({len(baseline_debt)} known baseline failures, non-blocking):",
+                    *(f"- {tid}" for tid in baseline_debt),
+                ])
+            remediation = "\n".join(remediation_lines)
+            return _diagnosis(f"⚠️ PRE_PUSH_TEST_ERROR: {head}", remediation, output, max_output)
 
     return _diagnosis(f"⚠️ PRE_PUSH_TEST_ERROR: {head}", "", output, max_output)
 
@@ -1456,9 +1482,14 @@ def run_hermetic_pytest(
                     spec.label, returncode, output, max_output,
                     parallel=spec.parallel, agent_python=agent_python, elapsed=elapsed,
                 )
-                return failure or (
-                    f"⚠️ PRE_PUSH_TEST_ERROR: {spec.label} pass, exit {returncode}, {elapsed:.0f}s"
-                )
+                if failure is not None:
+                    return failure
+                from ouroboros.preflight_baseline import parse_failed_test_ids
+
+                tolerated = parse_failed_test_ids(output)
+                if ctx is not None and tolerated:
+                    existing = list(getattr(ctx, "_preflight_tolerated_baseline_debt", ()))
+                    ctx._preflight_tolerated_baseline_debt = tuple(dict.fromkeys(existing + tolerated))
         if empty_passes == len(passes):
             return (
                 "⚠️ PRE_PUSH_TEST_ERROR: no tests were collected in any preflight pass — "

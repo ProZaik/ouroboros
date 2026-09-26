@@ -699,6 +699,9 @@ def _select_units(
         measurement_density=request.measurement_density))
     if keep_recent > 0:
         units = units[:-keep_recent] if len(units) > keep_recent else []
+    if request.keep_unit_ids:
+        keep_ids = set(request.keep_unit_ids)
+        units = [u for u in units if u.unit_id not in keep_ids]
     if not units:
         return None, "no_eligible"
     if int(request.reclaim_goal_tokens) <= 0:

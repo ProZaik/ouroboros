@@ -52,6 +52,20 @@ def test_str_replace_editor_uses_payload_relative_path(tmp_path):
     assert not (ctx.repo_dir / "plugin.py").exists()
 
 
+def test_str_replace_editor_auto_refreshes_paraphrased_anchor(tmp_path):
+    """ibl-05a306fdb5c9 (A5): auto-refresh anchor re-derives real anchor when old_str is paraphrased."""
+    ctx, skill = _ctx(tmp_path)
+    target = skill / "plugin.py"
+    target.write_text("    candidate = {'promote': True, 'task_id': 'abc'}\n", encoding="utf-8")
+    _admit_repair(ctx, skill)
+    # Paraphrased old_str (missing indentation, boolean type instead of True)
+    paraphrased = "candidate = {'promote': bool, 'task_id': 'abc'}"
+    result = _str_replace_editor(ctx, "plugin.py", paraphrased, "    candidate = {'promote': False, 'task_id': 'abc'}")
+    assert "Replaced" in result
+    assert target.read_text(encoding="utf-8") == "    candidate = {'promote': False, 'task_id': 'abc'}\n"
+
+
+
 def test_data_write_uses_payload_relative_path(tmp_path):
     ctx, skill = _ctx(tmp_path)
     _admit_repair(ctx, skill)

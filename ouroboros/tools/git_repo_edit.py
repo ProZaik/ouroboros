@@ -375,9 +375,18 @@ def _str_replace_editor(
     except Exception as e:
         return f"⚠️ STR_REPLACE_ERROR: cannot read {path}: {e}"
 
-    # Shared exact-match single-replacement (deferral 4): identical count==0/count>1
-    # feedback for the repo and data-plane editors.
     new_content, _match_err = _git()._str_match_replace(content, old_str, new_str, path, "STR_REPLACE_ERROR")
+    if _match_err:
+        # ibl-05a306fdb5c9 (A5): auto-refresh anchor on STR_REPLACE_ERROR and re-attempt once
+        refreshed = getattr(_git(), "_derive_refreshed_anchor", None)
+        refreshed_anchor = refreshed(content, old_str) if callable(refreshed) else None
+        if refreshed_anchor and refreshed_anchor != old_str:
+            retry_content, retry_err = _git()._str_match_replace(
+                content, refreshed_anchor, new_str, path, "STR_REPLACE_ERROR"
+            )
+            if not retry_err:
+                new_content = retry_content
+                _match_err = None
     if _match_err:
         return _match_err
     if data_skill_target is not None:

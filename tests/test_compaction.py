@@ -332,3 +332,62 @@ def test_manual_compact_context_copy_is_truthful_about_summary_and_provenance():
     assert "checkpoint/CAS provenance" in result
     assert "raw evidence remains retrievable" in description.lower()
     assert "no information is lost" not in description.lower()
+
+
+def test_compact_context_pin_unit_ids_and_invalidation():
+    from ouroboros.tools.compact_context import _compact_context, invalidate_read_view_coverage, record_context_view
+
+    ctx = SimpleNamespace(_read_file_seen={"/path/to/foo|1|10|0": (100, 12345)}, _read_coverage_stale=False)
+    invalidate_read_view_coverage(ctx, reason="compaction")
+    assert ctx._read_coverage_stale is True
+    assert ctx._read_file_seen == {}
+    assert ctx._read_coverage_invalidation_reason == "compaction"
+
+    messages = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "call", "tool_calls": [{"id": "c1", "function": {"name": "read_file", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "c1", "content": "data1"},
+        {"role": "assistant", "content": "call2", "tool_calls": [{"id": "c2", "function": {"name": "read_file", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "c2", "content": "data2"},
+    ]
+    record_context_view(ctx, messages, [{"function": {"name": "read_file"}}])
+
+    # Test inspect with pin_unit_ids
+    inspect_raw = _compact_context(ctx, inspect=True, pin_unit_ids=["unit:1:2:abc"])
+    inspect_data = json.loads(inspect_raw)
+    assert inspect_data["pinned_unit_ids"] == ["unit:1:2:abc"]
+    assert ctx._pinned_unit_ids == ("unit:1:2:abc",)
+
+    # Test working_note with keep_unit_ids merges pinned unit ids
+    _compact_context(ctx, working_note="updated note", keep_unit_ids=["unit:3:4:def"])
+    pending = ctx._pending_compaction
+    assert "unit:1:2:abc" in pending["keep_unit_ids"]
+    assert "unit:3:4:def" in pending["keep_unit_ids"]
+
+
+def test_select_units_respects_keep_unit_ids():
+    messages = [
+        *_large_unit("c1"),
+        *_large_unit("c2"),
+        *_large_unit("c3"),
+    ]
+    units = cc._atomic_units(messages)
+    assert len(units) == 3
+    pinned_id = units[0].unit_id
+    req = ContextReclaimRequest(
+        route_fp="r", round_id="1",
+        transcript_sha256=cc.context_reclaim_transcript_sha256(messages),
+        measurement_basis="cold_estimate",
+        measurement_density=1.0,
+        reclaim_goal_tokens=100_000,
+        keep_unit_ids=(pinned_id,),
+    )
+    selection, status = cc._select_units(
+        messages, req, keep_recent=0, trace_refs_by_tool_call_id={}, negative_memo=set(),
+        spec={"model": "m", "effort": "low", "resolved_model": "m", "provider": "p", "route_fp": "r", "output_budget": 1000, "use_local": False},
+    )
+    assert status == "applied"
+    assert selection is not None
+    selected_ids = [u.unit.unit_id for u in selection.units]
+    assert pinned_id not in selected_ids
+

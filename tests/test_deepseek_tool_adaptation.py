@@ -165,3 +165,28 @@ def test_str_match_replace_crlf_normalization():
     assert "Nearest candidate match near line 2:" in err
     assert "line 2 target" in err
 
+
+def test_derive_refreshed_anchor_paraphrase():
+    """ibl-05a306fdb5c9 (A5): auto-refresh anchor derives real byte-exact anchor from paraphrase."""
+    from ouroboros.tools.core import _derive_refreshed_anchor
+
+    text = """def promote_step():
+    candidate = {"promote": true, "task_id": "abc"}
+    return candidate
+"""
+    # Summary/scratchpad paraphrase corrupted boolean literal
+    paraphrased = 'candidate = {"promote": bool, "task_id": "abc"}'
+    refreshed = _derive_refreshed_anchor(text, paraphrased)
+    assert refreshed is not None
+    assert refreshed == '    candidate = {"promote": true, "task_id": "abc"}'
+
+
+def test_derive_refreshed_anchor_returns_none_when_ambiguous():
+    """ibl-05a306fdb5c9 (A5): ambiguous or multi-occurrence candidate does not auto-refresh."""
+    from ouroboros.tools.core import _derive_refreshed_anchor
+
+    text = "duplicate line\nduplicate line\n"
+    refreshed = _derive_refreshed_anchor(text, "duplicate line typo")
+    assert refreshed is None
+
+

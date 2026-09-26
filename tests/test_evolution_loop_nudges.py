@@ -179,3 +179,80 @@ def test_evolution_exit_contract_unification_ssot(monkeypatch):
     assert "MANDATORY FALSIFY-OR-CLOSE DIRECTIVE" in txt
     assert EVOLUTION_EXIT_CONTRACT in txt
 
+
+def test_evolution_decision_step_residual_pin_enforcement():
+    """ibl-eacad98b3b83 (A4): verified typed bounded decision step for falsified objective with residual owed."""
+    from ouroboros.loop_nudges import (
+        EvolutionDecisionStep,
+        record_evolution_falsification,
+        get_evolution_decision_step,
+        _maybe_inject_evolution_deadline,
+    )
+
+    accumulated_usage = {}
+    step = record_evolution_falsification(
+        accumulated_usage,
+        reason="Symbol already implemented in v7.4.15",
+        residual_owed=True,
+        target="tests/test_foo.py",
+    )
+    assert isinstance(step, EvolutionDecisionStep)
+    assert step.exit_type == "residual_pin"
+    assert step.falsified is True
+    assert step.residual_owed is True
+    assert get_evolution_decision_step(accumulated_usage) == step
+
+    messages = []
+    llm_trace = {"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]}
+    fired = _maybe_inject_evolution_deadline(
+        10, messages, accumulated_usage, llm_trace=llm_trace, task_type="evolution"
+    )
+    assert fired is True
+    text = messages[0]["content"]
+    assert "[BOUNDED DECISION DEADLINE" in text
+    assert "LAND THE RESIDUAL PIN" in text
+    assert "Do not conclude as an ungrounded NO_OP" in text
+
+
+def test_evolution_decision_step_no_residual_owed_enforcement():
+    """ibl-eacad98b3b83 (A4): verified bounded decision step for falsified objective when no residual owed."""
+    from ouroboros.loop_nudges import (
+        record_evolution_falsification,
+        _maybe_inject_evolution_deadline,
+    )
+
+    accumulated_usage = {}
+    record_evolution_falsification(
+        accumulated_usage,
+        reason="Non-existent API removed 6 months ago, no legacy seam left",
+        residual_owed=False,
+    )
+
+    messages = []
+    llm_trace = {"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]}
+    fired = _maybe_inject_evolution_deadline(
+        10, messages, accumulated_usage, llm_trace=llm_trace, task_type="evolution"
+    )
+    assert fired is True
+    text = messages[0]["content"]
+    assert "[BOUNDED DECISION DEADLINE" in text
+    assert "conclude this cycle with an explicit, named NO_OP" in text
+    assert "Non-existent API removed 6 months ago" in text
+
+
+def test_crux_directive_initializes_decision_step():
+    """ibl-eacad98b3b83 (A4): crux directive registers initial undecided EvolutionDecisionStep."""
+    from ouroboros.loop_nudges import (
+        get_evolution_decision_step,
+        _maybe_inject_evolution_crux_directive,
+    )
+
+    accumulated_usage = {}
+    messages = []
+    fired = _maybe_inject_evolution_crux_directive(1, messages, accumulated_usage, task_type="evolution")
+    assert fired is True
+    step = get_evolution_decision_step(accumulated_usage)
+    assert step is not None
+    assert step.exit_type == "undecided"
+
+

@@ -17,7 +17,8 @@ def _sha(data):
 
 
 def _executor(root):
-    request = ReviewRequest(surface="multi_model_review", goal="read evidence", session_root=str(root))
+    request = ReviewRequest(surface="multi_model_review", goal="read evidence", session_root=str(root),
+                            policy={"native_data_root": str(root / "data")})
     slot = ReviewSlot(slot_id="reader", model="openai/fake-reviewer", route=ReviewRouteKind.API_CHAT)
     return NativeToolRoundReviewExecutor(ReviewAssignment(request=request, slot=slot, call_id="extent"))
 
@@ -140,6 +141,9 @@ def test_result_fitting_receipt_matches_exact_text_returned_to_the_reviewer(tmp_
     assert delivered == raw.decode()[:receipt["text_chars"]]
     assert message["content"][body_start + receipt["text_chars"]:].startswith("\n⚠️ RESULT TRUNCATED:")
     assert len(json.dumps(message, ensure_ascii=False)) + 2 <= 1500
+    assert receipt["delivered"] is False
+    assert receipt["stale"] is True
+    assert receipt["source_gap"] == "tool_result_truncated"
 
 
 def test_exact_source_identity_keeps_the_complete_opened_path(tmp_path):
@@ -155,3 +159,68 @@ def test_exact_source_identity_keeps_the_complete_opened_path(tmp_path):
     assert len(relative) > 300
     assert extent["opened_path"] == relative
     assert extent["source_revision"] == _sha(b"source\n")
+
+
+def test_compaction_invalidates_unpinned_read_receipts(tmp_path):
+    (tmp_path / "a.txt").write_text("file A content\n", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("file B content\n", encoding="utf-8")
+    executor = _executor(tmp_path)
+    registry, schemas = executor._inspection_registry(str(tmp_path), tmp_path / "data")
+
+    # Read a.txt in round 1
+    m1 = executor._execute_inspection_call(registry, {
+        "id": "call-a", "function": {"name": "read_file", "arguments": json.dumps({"path": "a.txt"})},
+    }, {}, round_idx=1, room=50000)
+    # Read b.txt in round 2
+    m2 = executor._execute_inspection_call(registry, {
+        "id": "call-b", "function": {"name": "read_file", "arguments": json.dumps({"path": "b.txt"})},
+    }, {}, round_idx=2, room=50000)
+
+    executor._observe_sent_view([], schemas)
+    assert executor._tool_receipts[0]["delivered"] is True
+    assert executor._tool_receipts[1]["delivered"] is True
+
+    messages = [
+        {"role": "user", "content": "review start"},
+        {"role": "assistant", "content": "call-a", "tool_calls": [{"id": "call-a", "function": {"name": "read_file", "arguments": "{}"}}]},
+        m1,
+        {"role": "assistant", "content": "call-b", "tool_calls": [{"id": "call-b", "function": {"name": "read_file", "arguments": "{}"}}]},
+        m2,
+    ]
+    executor._observe_sent_view(messages, schemas)
+
+    from ouroboros.context_compaction import _atomic_units, context_reclaim_transcript_sha256
+    units = _atomic_units(messages)
+    assert len(units) == 2
+    unit_a_id = units[0].unit_id
+    unit_b_id = units[1].unit_id
+
+    (tmp_path / "data").mkdir(exist_ok=True)
+
+    rev = context_reclaim_transcript_sha256(messages)
+    # Pin unit_a only
+    executor._inspection_ctx._pinned_unit_ids = (unit_a_id,)
+    executor._inspection_ctx._pending_compaction = {
+        "observed": {"messages": messages, "tool_schemas": schemas, "revision": rev},
+        "working_note": "only keeping pinned a",
+        "expected_view_revision": rev,
+        "keep_unit_ids": (unit_a_id,),
+        "restore_unit_refs": (),
+        "schema_names": None,
+    }
+
+    executor._transcript_bound = 500_000
+    # Simulate applied compaction
+    applied = executor._apply_working_view(messages, schemas, round_idx=3)
+    assert applied is True
+    assert executor._inspection_ctx._read_coverage_stale is True
+
+    # Unit A receipt was pinned/retained: not invalidated
+    assert executor._tool_receipts[0]["delivered"] is True
+    assert not executor._tool_receipts[0].get("stale")
+
+    # Unit B receipt was not retained or pinned: invalidated!
+    assert executor._tool_receipts[1]["delivered"] is False
+    assert executor._tool_receipts[1]["stale"] is True
+    assert executor._tool_receipts[1]["source_gap"] == "compaction_invalidated"
+

@@ -432,7 +432,8 @@ class NativeToolRoundReviewExecutor(ReviewSlotExecutor):
         from ouroboros.tools.compact_context import record_context_view
         record_context_view(self._inspection_ctx, messages, schemas)
         for receipt in self._tool_receipts:
-            receipt["delivered"] = True
+            if not receipt.get("stale"):
+                receipt["delivered"] = True
 
     def _apply_working_view(self, messages: list, schemas: list, round_idx: int) -> bool:
         from ouroboros.context_budget import ContextReclaimRequest
@@ -451,6 +452,14 @@ class NativeToolRoundReviewExecutor(ReviewSlotExecutor):
             self._view_receipt = {"status": "checkpoint_failed", "reason": "native_source_root_unavailable"}
             return False
         observed = pending["observed"]
+        call_to_unit = {}
+        from ouroboros.context_compaction import _atomic_units
+        for u in _atomic_units(observed.get("messages") or []):
+            for m in (observed.get("messages") or [])[u.start:u.end + 1]:
+                t_id = m.get("tool_call_id")
+                if t_id:
+                    call_to_unit[t_id] = u.unit_id
+
         request = ContextReclaimRequest(
             route_fp=f"reviewer:{self.assignment.slot.slot_id}", round_id=str(round_idx),
             transcript_sha256=context_reclaim_transcript_sha256(messages),
@@ -472,6 +481,23 @@ class NativeToolRoundReviewExecutor(ReviewSlotExecutor):
             messages[:] = [m for m in candidate if m is not self._pressure_notice]
             self._pressure_notice = None
             self._view_changes += 1
+            from ouroboros.tools.compact_context import invalidate_read_view_coverage
+
+            invalidate_read_view_coverage(
+                self._inspection_ctx,
+                reason="compaction",
+                keep_unit_ids=getattr(receipt, "retained_unit_ids", ()),
+            )
+            pinned = set(getattr(self._inspection_ctx, "_pinned_unit_ids", ()))
+            retained = set(getattr(receipt, "retained_unit_ids", ())) | pinned
+
+            for r in self._tool_receipts:
+                if r.get("tool") == "read_file":
+                    u_id = call_to_unit.get(r.get("tool_call_id"))
+                    if u_id not in retained:
+                        r["delivered"] = False
+                        r["stale"] = True
+                        r["source_gap"] = "compaction_invalidated"
         if receipt.status != "no_op":
             notice = {"role": "user", "content": json.dumps({"context_view_status": receipt.status,
                        "receipt_source": ref, "reclaimed_tokens": receipt.reclaimed_tokens}, ensure_ascii=False)}
@@ -1176,7 +1202,7 @@ class NativeToolRoundReviewExecutor(ReviewSlotExecutor):
         # Host-observed evidence (bounded): which artifacts THIS episode
         # actually opened — disclosure, never a claim of full-surface coverage.
         self._tool_calls_total += 1
-        receipt: Dict[str, Any] = {"round": round_idx, "tool": name, "delivered": False,
+        receipt: Dict[str, Any] = {"round": round_idx, "tool": name, "tool_call_id": call_id, "delivered": False,
                                    "started_at": started_at, "duration_sec": round(time.time() - started, 3)}
         if isinstance(args, dict):
             for key in ("path", "root", "query", "pattern"):
@@ -1187,6 +1213,10 @@ class NativeToolRoundReviewExecutor(ReviewSlotExecutor):
         if source_gap:
             receipt["source_gap"] = source_gap
         receipt.update(extent)
+        if name == "read_file" and outcome == "executed" and sent < len(full):
+            receipt["delivered"] = False
+            receipt["stale"] = True
+            receipt["source_gap"] = "tool_result_truncated"
         self._tool_receipts.append(receipt)
         return {"role": "tool", "tool_call_id": call_id, "content": result}
 

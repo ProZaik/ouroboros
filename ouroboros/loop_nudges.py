@@ -11,6 +11,7 @@ import logging
 import pathlib
 import queue
 
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 from ouroboros import task_pacing
 from ouroboros.nanny_pacing import _nanny_burn_phrase, _nanny_metered_since_delegate_activity, _nanny_reminder_due
@@ -439,6 +440,45 @@ EVOLUTION_EXIT_CONTRACT = (
 )
 
 
+@dataclass(frozen=True)
+class EvolutionDecisionStep:
+    """Typed bounded decision step for self-evolution cycles (ibl-eacad98b3b83)."""
+
+    exit_type: str  # "mutation", "residual_pin", "no_op", "undecided"
+    falsified: bool = False
+    residual_owed: bool = False
+    reason: str = ""
+    target: str = ""
+
+
+def record_evolution_falsification(
+    accumulated_usage: Dict[str, Any],
+    *,
+    reason: str = "",
+    residual_owed: bool = True,
+    target: str = "",
+) -> EvolutionDecisionStep:
+    """Record that an evolution objective was falsified and establish the bounded exit step."""
+    exit_type = "residual_pin" if residual_owed else "no_op"
+    step = EvolutionDecisionStep(
+        exit_type=exit_type,
+        falsified=True,
+        residual_owed=residual_owed,
+        reason=reason,
+        target=target,
+    )
+    accumulated_usage["_evolution_decision_step"] = step
+    return step
+
+
+def get_evolution_decision_step(
+    accumulated_usage: Dict[str, Any],
+) -> Optional[EvolutionDecisionStep]:
+    """Retrieve the recorded evolution decision step if present."""
+    step = accumulated_usage.get("_evolution_decision_step")
+    return step if isinstance(step, EvolutionDecisionStep) else None
+
+
 def _maybe_inject_evolution_deadline(
     round_idx: int,
     messages: List[Dict[str, Any]],
@@ -457,13 +497,43 @@ def _maybe_inject_evolution_deadline(
     if last_injected is not None and round_idx - last_injected < 3:
         return False
     accumulated_usage["_last_evolution_deadline_round"] = round_idx
-    notice = (
-        f"[DECIDE-OR-ABSTAIN DEADLINE — round {round_idx}]\n"
-        f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
-        "Reconnaissance is exhausted. You MUST now choose one of the valid evolution exits:\n"
-        f"{EVOLUTION_EXIT_CONTRACT}\n"
-        "Do not continue read-only exploration without making a decision."
-    )
+
+    step = get_evolution_decision_step(accumulated_usage)
+    if step is None:
+        if accumulated_usage.get("falsified_objective") or accumulated_usage.get("falsification_evidence"):
+            step = record_evolution_falsification(
+                accumulated_usage,
+                reason=str(accumulated_usage.get("falsification_evidence") or "objective falsified"),
+                residual_owed=bool(accumulated_usage.get("residual_owed", True)),
+            )
+        else:
+            step = EvolutionDecisionStep(exit_type="mutation")
+            accumulated_usage["_evolution_decision_step"] = step
+
+    if step.falsified and step.residual_owed:
+        notice = (
+            f"[BOUNDED DECISION DEADLINE — round {round_idx}]\n"
+            f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
+            "Falsification of the objective has been established: a residual pin is OWED.\n"
+            "You MUST now LAND THE RESIDUAL PIN: edit the test or doc file that closes the residual and commit with `commit_reviewed`.\n"
+            "Do not conclude as an ungrounded NO_OP or abstain when a residual pin is owed."
+        )
+    elif step.falsified and not step.residual_owed:
+        notice = (
+            f"[BOUNDED DECISION DEADLINE — round {round_idx}]\n"
+            f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
+            "Falsification has been established and no residual is owed.\n"
+            f"You MUST conclude this cycle with an explicit, named NO_OP stating why no residual exists (reason: {step.reason or 'falsified without residual'}).\n"
+            "Do not continue read-only exploration without making a decision."
+        )
+    else:
+        notice = (
+            f"[DECIDE-OR-ABSTAIN DEADLINE — round {round_idx}]\n"
+            f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
+            "Reconnaissance is exhausted. You MUST now choose one of the valid evolution exits:\n"
+            f"{EVOLUTION_EXIT_CONTRACT}\n"
+            "Do not continue read-only exploration without making a decision."
+        )
     _loop()._append_or_merge_user_message(messages, notice)
     return True
 
@@ -547,6 +617,8 @@ def _maybe_inject_evolution_crux_directive(
     if accumulated_usage.get("_last_evolution_crux_directive_round") is not None:
         return False
     accumulated_usage["_last_evolution_crux_directive_round"] = round_idx
+    if "_evolution_decision_step" not in accumulated_usage:
+        accumulated_usage["_evolution_decision_step"] = EvolutionDecisionStep(exit_type="undecided")
     directive = (
         "[CRUX-FIRST]\n"
         "Your FIRST tool call this cycle must be a literal-string search for the "

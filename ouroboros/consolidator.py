@@ -613,6 +613,14 @@ class KnowledgeReadContext:
                     json.dumps(facts_receipt, ensure_ascii=False).encode("utf-8"), "json")
                 if applied.status in {"applied", "no_op"}:
                     before = candidate[:-len(rows)]  # the new completed batch is preserved verbatim
+                if applied.status == "applied":
+                    from ouroboros.tools.compact_context import invalidate_read_view_coverage
+
+                    invalidate_read_view_coverage(
+                        self.context,
+                        reason="compaction",
+                        keep_unit_ids=getattr(applied, "retained_unit_ids", ()),
+                    )
             for row in rows:
                 if row["fn_name"] == "compact_context":
                     row["result"] = json.dumps({"context_view": receipt}, ensure_ascii=False)

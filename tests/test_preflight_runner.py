@@ -3836,3 +3836,74 @@ def test_untracked_listing_is_decoded_with_the_filesystem_codec(tmp_path, monkey
 
     assert seen_kwargs.get("binary_stdout") is True, "the names must not be decoded by _run_git"
     assert os.fsencode(str(copied[0])).endswith(b"fixture_\xff.dat"), copied
+
+
+# ── Baseline discrimination (A8, ibl-16223221bb32, ibl-e57bf49161c2) ───────
+
+
+def test_classify_pass_result_discriminates_baseline_debt_when_no_new_failures():
+    from ouroboros.preflight_runner import _classify_pass_result
+
+    baseline_fail_output = (
+        "FAILED tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module\n"
+        "FAILED tests/test_domain_manifest.py::test_checker_cli_is_green_on_this_tree\n"
+    )
+    result = _classify_pass_result("parallel", 1, baseline_fail_output, 8000, parallel=True)
+    assert result is None, "All failures were known baseline debt; must return None (no new breakage)"
+
+
+def test_classify_pass_result_reports_new_failures_and_baseline_debt():
+    from ouroboros.preflight_runner import _classify_pass_result
+
+    mixed_fail_output = (
+        "FAILED tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module\n"
+        "FAILED tests/test_brand_new.py::test_breakage\n"
+    )
+    result = _classify_pass_result("parallel", 1, mixed_fail_output, 8000, parallel=True)
+    assert result is not None
+    assert "NEW FAILURES (1):" in result
+    assert "tests/test_brand_new.py::test_breakage" in result
+    assert "BASELINE DEBT (1 known baseline failures, non-blocking):" in result
+    assert "tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module" in result
+
+
+def test_discriminate_failures_unit():
+    from ouroboros.preflight_baseline import (
+        KNOWN_PREFLIGHT_FAILURES,
+        discriminate_failures,
+        is_baseline_failure,
+        parse_failed_test_ids,
+    )
+
+    sample = (
+        "FAILED tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module\n"
+        "FAILED tests/test_large_task_artifacts.py::test_capture_does_not_reuse_mutable_external_file_alias[hardlink]\n"
+        "FAILED tests/test_unrelated.py::test_broken\n"
+    )
+    ids = parse_failed_test_ids(sample)
+    assert len(ids) == 3
+
+    new_f, base_d = discriminate_failures(ids)
+    assert new_f == ["tests/test_unrelated.py::test_broken"]
+    assert len(base_d) == 2
+    assert is_baseline_failure("tests/test_domain_manifest.py::test_manifest_covers_the_tracked_population_exactly")
+    assert not is_baseline_failure("tests/test_clean.py::test_ok")
+
+
+def test_run_hermetic_pytest_tolerates_baseline_debt_on_ctx(tmp_path, two_pass_env, stub_passes):
+    from types import SimpleNamespace
+    from ouroboros.preflight_runner import run_hermetic_pytest
+
+    fail_out = (
+        "FAILED tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module\n"
+        "1 failed, 100 passed in 2.0s\n"
+    )
+    stub_passes([(1, fail_out), (0, "1 passed in 0.5s\n")])
+    repo = _make_repo(tmp_path, {"tests/test_dummy.py": "def test_dummy(): pass\n"})
+
+    ctx = SimpleNamespace()
+    result = run_hermetic_pytest(repo, ctx=ctx)
+    assert result is None, f"Pass with only baseline debt should succeed, got: {result}"
+    assert ctx._preflight_tests_passed is True
+    assert "tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module" in ctx._preflight_tolerated_baseline_debt
+

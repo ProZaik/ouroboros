@@ -305,6 +305,13 @@ def _run_round_reclaim(
         invalidate_task_cache_splits(ctx.task_id)
         prune_reclaim_trace_refs(ctx.tools._ctx, rebuilt)
         sanction_rewrite(ctx.tools._ctx, "compaction")
+        from ouroboros.tools.compact_context import invalidate_read_view_coverage
+
+        invalidate_read_view_coverage(
+            ctx.tools._ctx,
+            reason="compaction",
+            keep_unit_ids=getattr(ctx.tools._ctx, "_pinned_unit_ids", ()),
+        )
     return rebuilt, usage
 
 
@@ -395,6 +402,13 @@ def _run_authored_context_view(messages, ctx, pending, selected_names):
         invalidate_task_cache_splits(ctx.task_id)
         prune_reclaim_trace_refs(tool_ctx, candidate)
         sanction_rewrite(tool_ctx, "compaction")
+        from ouroboros.tools.compact_context import invalidate_read_view_coverage
+
+        invalidate_read_view_coverage(
+            tool_ctx,
+            reason="compaction",
+            keep_unit_ids=getattr(tool_ctx, "_pinned_unit_ids", ()),
+        )
     tool_ctx._pending_compaction = None
     tool_ctx._pending_tool_schema_names = None
     tool_ctx._context_view_receipt = receipt

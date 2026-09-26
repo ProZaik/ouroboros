@@ -75,7 +75,7 @@ from ouroboros.tools.review_helpers import (
     format_review_history_entry,
     paths_from_name_status,  # noqa: F401
 )
-from ouroboros.tools.core import _data_skill_path, _str_match_replace, is_skill_control_plane_path  # noqa: F401
+from ouroboros.tools.core import _data_skill_path, _derive_refreshed_anchor, _str_match_replace, is_skill_control_plane_path  # noqa: F401
 from ouroboros.contracts.task_constraint import normalize_task_constraint, resolve_payload_path  # noqa: F401
 from ouroboros.contracts.skill_payload_policy import (
     cross_skill_redirect_error,  # noqa: F401
