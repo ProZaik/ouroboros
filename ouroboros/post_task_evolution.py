@@ -28,7 +28,7 @@ from typing import Any, Dict, Optional
 
 from ouroboros.consciousness_authority import consciousness_origin_metadata, task_disabled_tools
 from ouroboros.evolution_fingerprint import _PLAN_REVIEW_SUFFIX
-from ouroboros.config import runtime_setting
+from ouroboros.config import REPO_DIR, runtime_setting
 
 log = logging.getLogger(__name__)
 
@@ -144,7 +144,9 @@ _DECISION_PROMPT = """You decide whether Ouroboros should run ONE reviewed self-
 {active_objective}
 
 Return ONLY a JSON object:
-{{"promote": true|false, "objective": "<one concrete, self-contained improvement to Ouroboros's own code/process; empty if not promoting>", "requires_plan_review": true|false, "backlog_id": "<id if this maps to a backlog item, else empty>"}}
+{{"promote": true|false, "objective": "<one concrete, self-contained improvement to Ouroboros's own code/process; empty if not promoting>", "requires_plan_review": true|false, "backlog_id": "<id if this maps to a backlog item, else empty>", "affected_paths": ["<repo-relative path this objective will touch; empty when none>"]}}
+
+The `affected_paths` entries MUST resolve under Ouroboros's own repository root. The host refuses any promotion whose listed paths do not resolve there, so never list a path belonging to another project or an external working tree.
 
 Rules: set promote=true ONLY when there is a concrete, high-value, self-contained code/process improvement worth a reviewed cycle right now. Prefer items already in the backlog, and weigh the solve-capability history: objective classes that historically got ABSORBED are better bets than classes that kept ending no_op/abandoned. Bias toward SMALL, TARGETED objectives that directly improve the ability to solve tasks (a sharper tool, a fixed failure mode, a removed bottleneck) over broad refactors or speculative platform work — small reviewed wins absorb; sprawling objectives historically die as no_op. Do NOT propose anything in the CLOSED / DROPPED list, or a restatement of the ACTIVE CAMPAIGN OBJECTIVE — those are already handled; if the only candidates are closed/active, return promote=false. If nothing is clearly worthwhile, return promote=false. {force_note}"""
 
@@ -311,18 +313,53 @@ def _decide_promotion(env: Any, task: Dict[str, Any], reflection_entry: Optional
         obj = _loose_json((resp.get("content") or "").strip())
         if not obj:
             return None
+        raw_paths = obj.get("affected_paths") or []
+        if isinstance(raw_paths, str):
+            raw_paths = [raw_paths]
+        affected_paths = [str(p).strip() for p in raw_paths if str(p).strip()]
+        if not _affected_paths_resolve(affected_paths):
+            log.info(
+                "post_task_evolution: refusing promotion; affected_paths do not resolve under repo root: %r",
+                affected_paths,
+            )
+            return None
         return {
             "promote": bool(obj.get("promote")),
             "objective": str(obj.get("objective") or "").strip(),
             # Default to requiring plan review (preserve the advisory->reviewed boundary).
             "requires_plan_review": bool(obj.get("requires_plan_review", True)),
             "backlog_id": str(obj.get("backlog_id") or "").strip(),
+            "affected_paths": affected_paths,
         }
     except Exception as exc:
         from ouroboros.llm_claudexor import propagate_model_error
         propagate_model_error(exc)
         log.debug("post_task_evolution: decision LLM call failed", exc_info=True)
         return None
+
+
+def _affected_paths_resolve(paths: List[str]) -> bool:
+    """Refuse a promotion whose affected_paths do not resolve under Ouroboros's own repo.
+
+    A project-scoped reflection can name a file in another working tree; promoting such
+    an objective mints a system_repo evolution cycle that can never land (the class behind
+    cycles #62/#70/#77). Paths are checked against REPO_DIR; an empty list passes.
+    """
+    if not paths:
+        return True
+    try:
+        repo_root = pathlib.Path(REPO_DIR).resolve()
+    except Exception:
+        return False
+    for raw in paths:
+        try:
+            candidate = pathlib.Path(raw)
+            if not candidate.is_absolute():
+                candidate = repo_root / candidate
+            candidate.resolve().relative_to(repo_root)
+        except Exception:
+            return False
+    return True
 
 
 def _write_request(drive_root: pathlib.Path, decision: Dict[str, Any], task: Dict[str, Any]) -> None:

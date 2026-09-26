@@ -1,7 +1,28 @@
 """C4 (BUG 3 Layer A): feed the CLOSED/DROPPED set + active objective into the chooser prompt."""
 import json
 
-from ouroboros.post_task_evolution import _DECISION_PROMPT, _closed_objectives_digest
+from ouroboros.post_task_evolution import (
+    _DECISION_PROMPT,
+    _affected_paths_resolve,
+    _closed_objectives_digest,
+)
+
+
+def test_affected_paths_resolve_refuses_foreign_paths():
+    """Host-side seeding guard (ibl-c68d8dc7d070): a promotion naming a path outside the
+    repo root must be refused, while an in-repo path (and an empty list) pass."""
+    import pathlib
+
+    from ouroboros.config import REPO_DIR
+
+    # Negative control: paths that cannot resolve under REPO_DIR are refused.
+    assert _affected_paths_resolve(["/etc/passwd"]) is False
+    assert _affected_paths_resolve(["../outside/other_project.py"]) is False
+    # A real in-repo relative path resolves.
+    assert _affected_paths_resolve(["ouroboros/post_task_evolution.py"]) is True
+    assert _affected_paths_resolve([str(pathlib.Path(REPO_DIR) / "VERSION")]) is True
+    # Empty list is always promotable.
+    assert _affected_paths_resolve([]) is True
 
 
 def test_decision_prompt_has_closed_and_active_sections_and_formats():
