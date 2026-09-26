@@ -67,6 +67,44 @@ def test_evolution_deadline_not_injected_if_recent_mutation():
     )
     assert fired is False
 
+
+def test_evolution_deadline_notice_names_the_residual_pin_exit():
+    """A falsified objective must convert into a residual-pin commit, not a no-op.
+
+    Reviewer FAIL on cycle #79: the notices only offered two exits (mutate /
+    abstain), so cycles #76-#78 each read the instruction correctly and
+    abstained. The third exit is now typed into the notice text itself.
+    """
+    messages = []
+    accumulated_usage = {}
+    llm_trace = {
+        "tool_calls": [
+            {"tool": "read_file", "round_id": "exec_abc:round:1"},
+        ]
+    }
+    fired = _maybe_inject_evolution_deadline(
+        10, messages, accumulated_usage, llm_trace=llm_trace, task_type="evolution"
+    )
+    assert fired is True
+    text = messages[0]["content"]
+    assert "RESIDUAL PIN" in text
+    assert "3." in text
+
+
+def test_evolution_crux_directive_names_residual_pin_for_falsified_objective():
+    """The round-1 crux directive names the residual-pin default, not bare exit."""
+    from ouroboros.loop_nudges import _maybe_inject_evolution_crux_directive
+
+    messages = []
+    accumulated_usage = {}
+    fired = _maybe_inject_evolution_crux_directive(
+        1, messages, accumulated_usage, task_type="evolution"
+    )
+    assert fired is True
+    text = messages[0]["content"]
+    assert "RESIDUAL PIN" in text
+    assert "NO_OP" in text
+
 def test_plan_review_directive_injected():
     messages = []
     accumulated_usage = {}
