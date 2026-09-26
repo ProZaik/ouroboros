@@ -64,6 +64,39 @@ def test_classifier_explicit_scope_overrides():
     assert is_system_improvement_candidate({"summary": "anything", "scope": "project"}) is False
 
 
+def test_classifier_structural_affected_paths():
+    """ibl-86920c536dfe (A3): structural resolver derives decision from affected_paths."""
+    system_candidate = {
+        "summary": "Improve anchor matching in repo edit tool",
+        "affected_paths": ["ouroboros/tools/git_repo_edit.py"],
+        "category": "tooling",
+    }
+    assert is_system_improvement_candidate(system_candidate, {"project_id": "stand-appsec-pipeline"}) is True
+
+    foreign_candidate = {
+        "summary": "Fix validation error in scanner module",
+        "affected_paths": ["src/master/native_scanner.py"],
+        "category": "tooling",
+    }
+    assert is_system_improvement_candidate(foreign_candidate, {"project_id": "stand-appsec-pipeline"}) is False
+
+    project_explicit_candidate = {
+        "summary": "Fix logic in helper",
+        "affected_paths": ["/root/projects/stand-appsec-pipeline/src/helper.py"],
+        "category": "process",
+    }
+    assert is_system_improvement_candidate(project_explicit_candidate, {"project_id": "stand-appsec-pipeline"}) is False
+
+
+def test_classifier_structural_path_in_prose_without_regex_keywords():
+    """Candidate naming a project path without using any project regex keywords (apk/jadx/frida)."""
+    candidate = {
+        "summary": "Fix null pointer in src/master/worker.py when loading configuration",
+        "category": "correctness",
+    }
+    assert is_system_improvement_candidate(candidate, {"project_id": "stand-appsec-pipeline"}) is False
+
+
 def test_update_project_improvement_backlog_writes_to_project_shelf(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
     env = SimpleNamespace(drive_root=tmp_path, budget_drive_root=str(tmp_path))
