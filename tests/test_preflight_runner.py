@@ -3907,3 +3907,23 @@ def test_run_hermetic_pytest_tolerates_baseline_debt_on_ctx(tmp_path, two_pass_e
     assert ctx._preflight_tests_passed is True
     assert "tests/test_docs_sync.py::test_architecture_component_map_covers_every_live_runtime_module" in ctx._preflight_tolerated_baseline_debt
 
+
+def test_parse_failed_test_ids_handles_hyphens_and_errors():
+    """ibl-16223221bb32 / ibl-e57bf49161c2 (A8): preserves hyphens in test names, params, and parses errors."""
+    from ouroboros.preflight_baseline import parse_failed_test_ids
+
+    sample = (
+        "FAILED tests/test_large_task_artifacts.py::test_capture_does_not_reuse_mutable_external_file_alias[hardlink-1] - AssertionError: fail\n"
+        "FAILED tests/test_my-feature.py::test_case_a-1 - AssertionError\n"
+        "FAILED tests/test_param.py::test_foo[param-opt-a]\n"
+        "ERROR tests/test_setup.py::test_init - RuntimeError: broken fixture\n"
+    )
+    ids = parse_failed_test_ids(sample)
+    assert ids == [
+        "tests/test_large_task_artifacts.py::test_capture_does_not_reuse_mutable_external_file_alias[hardlink-1]",
+        "tests/test_my-feature.py::test_case_a-1",
+        "tests/test_param.py::test_foo[param-opt-a]",
+        "tests/test_setup.py::test_init",
+    ]
+
+

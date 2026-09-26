@@ -256,3 +256,36 @@ def test_crux_directive_initializes_decision_step():
     assert step.exit_type == "undecided"
 
 
+def test_crux_directive_followed_by_falsification_transitions_to_bounded_decision():
+    """ibl-eacad98b3b83 (A4): crux directive initializing undecided step transitions to bounded decision on falsification."""
+    from ouroboros.loop_nudges import (
+        get_evolution_decision_step,
+        _maybe_inject_evolution_crux_directive,
+        _maybe_inject_evolution_deadline,
+    )
+
+    accumulated_usage = {}
+    messages = []
+    # Round 1 crux directive initializes undecided step
+    _maybe_inject_evolution_crux_directive(1, messages, accumulated_usage, task_type="evolution")
+    assert get_evolution_decision_step(accumulated_usage).exit_type == "undecided"
+
+    # Objective is falsified in later rounds
+    accumulated_usage["falsified_objective"] = True
+    accumulated_usage["falsification_evidence"] = "API already removed in 7.4.16"
+    accumulated_usage["residual_owed"] = True
+
+    llm_trace = {"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]}
+    fired = _maybe_inject_evolution_deadline(10, messages, accumulated_usage, llm_trace=llm_trace, task_type="evolution")
+    assert fired is True
+    step = get_evolution_decision_step(accumulated_usage)
+    assert step is not None
+    assert step.falsified is True
+    assert step.residual_owed is True
+    assert step.exit_type == "residual_pin"
+    text = messages[-1]["content"]
+    assert "[BOUNDED DECISION DEADLINE" in text
+    assert "LAND THE RESIDUAL PIN" in text
+
+
+

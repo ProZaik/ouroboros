@@ -304,59 +304,53 @@ def _derive_refreshed_anchor(text: str, old_str: str) -> Optional[str]:
     import difflib
 
     lines = text.splitlines(keepends=True)
-    old_lines = [l for l in old_str.splitlines(keepends=True) if l.strip()]
+    old_lines = old_str.splitlines(keepends=True)
     if not old_lines or not lines:
         return None
 
-    n_old = max(1, len(old_lines))
+    n_old = len(old_lines)
     normalized_old = old_str.replace("\r\n", "\n")
-    matcher = difflib.SequenceMatcher(None, normalized_old, "")
-    best_idx = None
-    best_ratio = 0.60
+    candidates = []
 
-    # 1. Block-level sliding window
-    for idx in range(0, max(1, len(lines) - n_old + 1)):
-        window = "".join(lines[idx:idx + n_old]).replace("\r\n", "\n")
-        matcher.set_seq2(window)
-        if matcher.quick_ratio() >= best_ratio:
+    for w_size in ((n_old, n_old - 1, n_old + 1) if n_old > 1 else (1,)):
+        if w_size < 1 or w_size > len(lines):
+            continue
+        for idx in range(0, len(lines) - w_size + 1):
+            window = "".join(lines[idx:idx + w_size])
+            normalized_window = window.replace("\r\n", "\n")
+            matcher = difflib.SequenceMatcher(None, normalized_old, normalized_window)
             ratio = matcher.ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
-                best_idx = idx
+            if ratio >= 0.55:
+                cand = window
+                if not old_str.endswith(("\n", "\r\n")) and cand.endswith(("\n", "\r\n")):
+                    cand = cand.rstrip("\r\n")
+                candidates.append((ratio, cand))
 
-    # 2. Line-level fallback for single-line or distinctive targets
-    if best_idx is None:
-        stripped_lines = [l.strip() for l in lines]
-        candidate_queries = sorted(
-            [(i, l.strip()) for i, l in enumerate(old_lines) if len(l.strip()) >= 3],
-            key=lambda x: len(x[1]),
-            reverse=True,
-        )
-        if candidate_queries:
-            for old_idx, target_line in candidate_queries:
-                for file_idx, line in enumerate(stripped_lines):
-                    if target_line in line or line == target_line:
-                        best_idx = max(0, file_idx - old_idx)
-                        break
-                if best_idx is not None:
-                    break
-                matches = difflib.get_close_matches(target_line, stripped_lines, n=1, cutoff=0.7)
-                if matches:
-                    file_idx = stripped_lines.index(matches[0])
-                    best_idx = max(0, file_idx - old_idx)
-                    break
+    # Single-line fallback if sliding window (due to indentation differences) was below 0.55
+    if not candidates and n_old == 1:
+        target_core = old_str.strip()
+        for line in lines:
+            line_core = line.strip()
+            if not line_core:
+                continue
+            ratio = difflib.SequenceMatcher(None, target_core, line_core).ratio()
+            if ratio >= 0.55:
+                cand = line
+                if not old_str.endswith(("\n", "\r\n")) and cand.endswith(("\n", "\r\n")):
+                    cand = cand.rstrip("\r\n")
+                candidates.append((ratio, cand))
 
-    if best_idx is None:
+    if not candidates:
         return None
 
-    candidate = "".join(lines[best_idx:best_idx + n_old])
-    if not old_str.endswith(("\n", "\r\n")) and candidate.endswith(("\n", "\r\n")):
-        candidate = candidate.rstrip("\r\n")
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best_sim, best_cand = candidates[0]
+    for sim, cand in candidates[1:]:
+        if cand != best_cand and abs(best_sim - sim) < 0.05:
+            return None  # Ambiguous
 
-    if candidate and text.count(candidate) == 1:
-        sim = difflib.SequenceMatcher(None, candidate, old_str).ratio()
-        if sim >= 0.50:
-            return candidate
+    if text.count(best_cand) == 1 and best_sim >= 0.55:
+        return best_cand
 
     return None
 

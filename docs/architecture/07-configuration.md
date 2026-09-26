@@ -203,6 +203,9 @@ A registry of `config.SETTINGS_DEFAULTS` (exact defaults canonical in `settings_
 | OUROBOROS_POST_TASK_EVOLUTION_CADENCE | llm | Promotion cadence `llm` or `every_n:k` (malformed normalizes to `llm`) |
 | OUROBOROS_POST_TASK_EVOLUTION_BUDGET_USD | 0.0 | Remaining-global-budget start floor, not a cycle cap |
 | OUROBOROS_EVOLUTION_PERSISTENT_OBJECTIVE | "" | Owner-only persistent campaign bias; still passes review gates |
+| OUROBOROS_SYMBIOTIC_MODE | false | Symbiotic evolution mode toggle |
+| OUROBOROS_SYMBIOTIC_TARGET_PROJECT | stand-appsec-pipeline | Symbiotic target project directory |
+| OUROBOROS_SYMBIOTIC_CADENCE | active | Symbiotic evolution cadence |
 | LOCAL_MODEL_PORT | 8766 | Local-model server port |
 | OUROBOROS_HOST_SERVICE_PORT | 8767 | Host Service port (loopback-only; §12) |
 | OUROBOROS_PRESENCE_MAX_ACTIVE | 2 | Cross-process Presence turn cap (UI-bounded 1–20) |

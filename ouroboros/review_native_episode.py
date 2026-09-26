@@ -459,6 +459,9 @@ class NativeToolRoundReviewExecutor(ReviewSlotExecutor):
                 t_id = m.get("tool_call_id")
                 if t_id:
                     call_to_unit[t_id] = u.unit_id
+                for tc in (m.get("tool_calls") or []):
+                    if isinstance(tc, dict) and tc.get("id"):
+                        call_to_unit[tc["id"]] = u.unit_id
 
         request = ContextReclaimRequest(
             route_fp=f"reviewer:{self.assignment.slot.slot_id}", round_id=str(round_idx),

@@ -499,7 +499,10 @@ def _maybe_inject_evolution_deadline(
     accumulated_usage["_last_evolution_deadline_round"] = round_idx
 
     step = get_evolution_decision_step(accumulated_usage)
-    if step is None:
+    if step is None or (
+        not step.falsified
+        and (accumulated_usage.get("falsified_objective") or accumulated_usage.get("falsification_evidence"))
+    ):
         if accumulated_usage.get("falsified_objective") or accumulated_usage.get("falsification_evidence"):
             step = record_evolution_falsification(
                 accumulated_usage,

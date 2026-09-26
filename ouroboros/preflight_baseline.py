@@ -46,9 +46,10 @@ def parse_failed_test_ids(output: str) -> list[str]:
     Matches lines from summary or short test summary info:
       FAILED tests/test_foo.py::test_bar - AssertionError: ...
       FAILED tests/test_foo.py::test_bar
+      ERROR tests/test_foo.py::test_bar - Error: ...
     """
     failures: list[str] = []
-    pattern = re.compile(r"^FAILED\s+([^\s:]+(?:::[^\s:\-]+)+)", re.MULTILINE)
+    pattern = re.compile(r"^(?:FAILED|ERROR)\s+(\S+?)(?:\s+-\s+.*|\s*$)", re.MULTILINE)
     for match in pattern.finditer(output):
         test_id = match.group(1).strip()
         if test_id not in failures:

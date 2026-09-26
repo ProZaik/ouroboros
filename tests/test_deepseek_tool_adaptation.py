@@ -190,3 +190,82 @@ def test_derive_refreshed_anchor_returns_none_when_ambiguous():
     assert refreshed is None
 
 
+def test_derive_refreshed_anchor_multiline_with_blank_lines():
+    """ibl-05a306fdb5c9 (A5): multiline block with blank lines does not truncate trailing lines."""
+    from ouroboros.tools.core import _derive_refreshed_anchor, _str_match_replace
+
+    text = """def calculate(a, b):
+
+    result = a + b
+
+    return result
+"""
+    paraphrased = """def calculate(a, b):
+
+    result = a + b_typo
+
+    return result"""
+
+    refreshed = _derive_refreshed_anchor(text, paraphrased)
+    assert refreshed is not None
+    # Must cover full 5-line block, not just first 3 lines
+    assert "return result" in refreshed
+    assert refreshed.startswith("def calculate(a, b):")
+
+    new_text, err = _str_match_replace(
+        text,
+        refreshed,
+        """def calculate(a, b):
+
+    result = a + b_fixed
+
+    return result""",
+        "demo.py",
+        "EDIT_TEXT_ERROR",
+    )
+    assert err is None
+    assert new_text.count("return result") == 1
+
+
+def test_derive_refreshed_anchor_subline_expression_preserves_indentation():
+    """ibl-05a306fdb5c9 (A5): unindented expression anchor preserves line indentation."""
+    from ouroboros.tools.core import _derive_refreshed_anchor, _str_match_replace
+
+    text = """def sample():
+    task = {
+        "promote": True,
+        "task_id": "123",
+    }
+"""
+    # Paraphrased unindented anchor
+    paraphrased = '"promote": bool,'
+    refreshed = _derive_refreshed_anchor(text, paraphrased)
+    assert refreshed is not None
+    assert refreshed == '        "promote": True,'
+
+    new_text, err = _str_match_replace(
+        text, refreshed, '        "promote": False,', "demo.py", "EDIT_TEXT_ERROR"
+    )
+    assert err is None
+    assert '        "promote": False,\n' in new_text
+
+
+def test_derive_refreshed_anchor_ambiguous_functions_returns_none():
+    """ibl-05a306fdb5c9 (A5): two distinct functions matching equally close return None."""
+    from ouroboros.tools.core import _derive_refreshed_anchor
+
+    text = """def func_one():
+    return 1
+
+def func_two():
+    return 1
+"""
+    # Equally similar to func_one and func_two
+    paraphrased = """def func_typo():
+    return 1"""
+
+    refreshed = _derive_refreshed_anchor(text, paraphrased)
+    assert refreshed is None
+
+
+
