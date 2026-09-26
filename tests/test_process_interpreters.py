@@ -10,6 +10,49 @@ from ouroboros.process_interpreters import resolve_process_python
 from ouroboros.tools.registry import ToolContext, ToolRegistry
 
 
+@pytest.fixture(autouse=True)
+def _pin_safety_mode_full(monkeypatch):
+    """Pin the safety layer to full mode so the assertions below are hermetic.
+
+    ouroboros.safety.check_safety() consults get_safety_mode() before running
+    its LLM check; an ambient OUROBOROS_SAFETY_MODE=off (a real developer
+    setting - see safety.py's _emit_safety_mode_skip) short-circuits that call,
+    so the two LLM-check tests below would silently stop exercising it. Pin
+    both the env var and the read site so no ambient setting can flip the
+    behaviour these tests assert.
+    """
+    monkeypatch.setenv("OUROBOROS_SAFETY_MODE", "full")
+    import ouroboros.safety as safety
+    monkeypatch.setattr(safety, "get_safety_mode", lambda: "full")
+
+
+def test_safety_mode_pinned_full_regardless_of_ambient(tmp_path, monkeypatch):
+    """Regression pin for the autouse fixture above.
+
+    With the ambient OUROBOROS_SAFETY_MODE forced to 'off', the pinned read
+    site must still report 'full' and check_safety must still invoke the LLM
+    check. Removing the fixture makes get_safety_mode() report 'off' and
+    check_safety short-circuit, turning this red instead of letting the two
+    LLM-check tests pass vacuously.
+    """
+    monkeypatch.setenv("OUROBOROS_SAFETY_MODE", "off")
+    import ouroboros.safety as safety
+
+    assert safety.get_safety_mode() == "full"
+
+    calls = []
+
+    def _llm_check(_tool, _arguments, *_args, **_kwargs):
+        calls.append(list(_arguments.get("cmd", [])))
+        return False, "llm-called"
+
+    monkeypatch.setattr(safety, "_run_llm_check", _llm_check)
+    agent_python = str(_executable(tmp_path / "agent" / "bin" / "python"))
+    result = safety.check_safety("run_command", {"cmd": [agent_python, "-m", "pytest", "-q"]})
+    assert result == (False, "llm-called")
+    assert len(calls) == 1
+
+
 def _executable(path: pathlib.Path) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
