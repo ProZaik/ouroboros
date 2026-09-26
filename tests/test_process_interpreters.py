@@ -161,7 +161,31 @@ def test_user_files_project_venv_and_missing_venv_path_fallback(tmp_path, monkey
     assert resolved["cmd"][0] == str(project_python)
     assert trace is not None and trace.surface == "user_files"
 
+    # When pyvenv.cfg exists but python executable is missing / unexecutable:
+    # returns typed namespace_unresolvable fallback (ibl-f8f2f0ceac6a).
+    from ouroboros import platform_layer
+    project_python.unlink()
+    res_unresolvable = platform_layer.project_venv_python(project)
+    assert res_unresolvable == ""
+    assert res_unresolvable.reason == "namespace_unresolvable"
+
+    unresolved_ns, fallback_ns = resolve_process_python(
+        ctx,
+        "run_command",
+        _tool_args("run_command", cwd=str(project)),
+        runtime_mode="advanced",
+    )
+    assert unresolved_ns["cmd"][0] == "python"
+    assert fallback_ns is not None
+    assert fallback_ns.environment == "target_path"
+    assert fallback_ns.fallback_reason == "project_venv_namespace_unresolvable"
+
+    # When .venv/pyvenv.cfg does not exist: returns no_venv and project_venv_unavailable
     (project / ".venv" / "pyvenv.cfg").unlink()
+    res_no_venv = platform_layer.project_venv_python(project)
+    assert res_no_venv == ""
+    assert res_no_venv.reason == "no_venv"
+
     unresolved, fallback = resolve_process_python(
         ctx,
         "run_command",

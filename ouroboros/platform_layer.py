@@ -1108,15 +1108,39 @@ def pip_install_target_args(interpreter: str) -> List[str]:
     return ["--user"] if interpreter_is_embedded(interpreter) else []
 
 
-def project_venv_python(project_root: pathlib.Path) -> str:
+class ProjectVenvResult(str):
+    """Typed result for project_venv_python (ibl-f8f2f0ceac6a).
+
+    Subclasses str so existing string consumers and truthiness tests work unchanged.
+    Attaches a typed reason attribute:
+    - "" on success (venv executable found and valid)
+    - "no_venv" when no .venv or pyvenv.cfg exists
+    - "namespace_unresolvable" when .venv/pyvenv.cfg exists but its interpreter
+      or configured home cannot be resolved/executed in the current namespace.
+    """
+
+    reason: str
+
+    def __new__(cls, executable: str = "", reason: str = ""):
+        inst = super().__new__(cls, executable)
+        inst.reason = reason
+        return inst
+
+    @property
+    def executable(self) -> str:
+        return str(self)
+
+
+def project_venv_python(project_root: pathlib.Path) -> ProjectVenvResult:
     """Return the executable for a valid project ``.venv`` on this platform.
 
     Keep the lexical venv path (rather than resolving its symlink) so Python
     discovers the adjacent ``pyvenv.cfg`` and activates the environment.
     """
     env_root = pathlib.Path(project_root) / ".venv"
-    if not (env_root / "pyvenv.cfg").is_file():
-        return ""
+    cfg_file = env_root / "pyvenv.cfg"
+    if not cfg_file.is_file():
+        return ProjectVenvResult("", reason="no_venv")
     candidates = (
         (env_root / "Scripts" / "python.exe",)
         if IS_WINDOWS
@@ -1125,10 +1149,10 @@ def project_venv_python(project_root: pathlib.Path) -> str:
     for candidate in candidates:
         try:
             if candidate.is_file() and os.access(candidate, os.X_OK):
-                return os.path.abspath(os.fspath(candidate))
+                return ProjectVenvResult(os.path.abspath(os.fspath(candidate)), reason="")
         except OSError:
             continue
-    return ""
+    return ProjectVenvResult("", reason="namespace_unresolvable")
 
 
 def embedded_node_candidates(base_dir: pathlib.Path) -> List[pathlib.Path]:

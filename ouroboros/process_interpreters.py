@@ -408,6 +408,11 @@ def resolve_process_python(
                 **_trace_target(binding),
             )
             return _replace_request(name, original, argv, project_python), trace
+        venv_reason = getattr(project_python, "reason", "")
+        if venv_reason == "namespace_unresolvable":
+            effective_fallback = fallback_reason or "project_venv_namespace_unresolvable"
+        else:
+            effective_fallback = fallback_reason or "project_venv_unavailable"
         trace = PythonResolutionTrace(
             tool=name,
             requested_interpreter=requested,
@@ -415,7 +420,7 @@ def resolve_process_python(
             surface=surface,
             environment="target_path",
             reason="target_path_fallback",
-            fallback_reason=fallback_reason or "project_venv_unavailable",
+            fallback_reason=effective_fallback,
             **_trace_target(binding),
         )
         return original, trace
