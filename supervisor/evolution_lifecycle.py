@@ -1550,14 +1550,14 @@ def build_evolution_task_text(cycle: int) -> str:
         parts.extend(["", "## Prior No-Op Abstention Reasons (do NOT re-derive known facts)", *prior_abstentions[:5]])
 
     if trailing_no_ops >= 3:
+        from ouroboros.loop_nudges import EVOLUTION_EXIT_CONTRACT
         parts.extend([
             "",
             "## ⚠️ MANDATORY FALSIFY-OR-CLOSE DIRECTIVE (>=3 consecutive NO-OP cycles)",
             f"This objective has had {trailing_no_ops} consecutive NO-OP cycles without landing any modifications.",
             "You MUST NOT spend this cycle in passive reconnaissance or re-confirming already-known facts.",
-            "You MUST either:",
-            "1. Reproduce the claimed defect/gap with a concrete test or reproduction call and implement the fix, OR",
-            "2. Conclude that the objective's premise is invalid/falsified or already satisfied, update the backlog item to 'status: done' or 'status: closed' with proof, and explicitly exit.",
+            "You MUST choose one of the valid evolution exits:",
+            EVOLUTION_EXIT_CONTRACT,
         ])
     # Fix B (C10.2): surface the durable improvement backlog and recent solve-capability
     # as optional CONTEXT, never a directive. Ouroboros decides what (if anything) to act

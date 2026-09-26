@@ -134,3 +134,48 @@ def test_plan_review_directive_not_injected_after_mutation():
         4, messages, accumulated_usage, llm_trace=llm_trace
     )
     assert fired is False
+
+
+def test_evolution_exit_contract_unification_ssot(monkeypatch):
+    """ibl-ea1b0e202f90 (A2): verify all three evolution notice builders render EVOLUTION_EXIT_CONTRACT."""
+    from ouroboros.loop_nudges import (
+        EVOLUTION_EXIT_CONTRACT,
+        _maybe_inject_evolution_deadline,
+        _maybe_inject_evolution_crux_directive,
+    )
+    import supervisor.evolution_lifecycle as lifecycle
+
+    # 1. Deadline producer
+    msgs1 = []
+    _maybe_inject_evolution_deadline(
+        10,
+        msgs1,
+        {},
+        llm_trace={"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]},
+        task_type="evolution",
+    )
+    assert len(msgs1) == 1
+    assert EVOLUTION_EXIT_CONTRACT in msgs1[0]["content"]
+
+    # 2. Crux directive producer
+    msgs2 = []
+    _maybe_inject_evolution_crux_directive(1, msgs2, {}, task_type="evolution")
+    assert len(msgs2) == 1
+    assert EVOLUTION_EXIT_CONTRACT in msgs2[0]["content"]
+
+    # 3. Supervisor evolution lifecycle producer (fires when >= 3 consecutive no-ops)
+    fake_campaign = {
+        "status": "active",
+        "objective": "Test unify exit contract",
+        "history": [
+            {"task_id": "t1", "transaction": {"cycle_outcome": "no_op", "no_op_reason": "r1"}},
+            {"task_id": "t2", "transaction": {"cycle_outcome": "no_op", "no_op_reason": "r2"}},
+            {"task_id": "t3", "transaction": {"cycle_outcome": "no_op", "no_op_reason": "r3"}},
+        ],
+    }
+    monkeypatch.setattr(lifecycle, "_read_evolution_campaign", lambda: fake_campaign)
+    monkeypatch.setattr(lifecycle, "_evolution_target_preflight", lambda obj, st: (obj, st, ""))
+    txt = lifecycle.build_evolution_task_text(4)
+    assert "MANDATORY FALSIFY-OR-CLOSE DIRECTIVE" in txt
+    assert EVOLUTION_EXIT_CONTRACT in txt
+

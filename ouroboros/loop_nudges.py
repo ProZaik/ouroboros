@@ -426,6 +426,19 @@ def rounds_since_last_mutative_call(llm_trace: Optional[Dict[str, Any]], current
     return max(0, current_round - last_mutation_round)
 
 
+EVOLUTION_EXIT_CONTRACT = (
+    "1. Perform the intended code change via `edit_text` or `write_file` and commit with `commit_reviewed`, OR\n"
+    "2. Conclude this cycle with an explicit, honest NO_OP / ABSTAIN explanation, OR\n"
+    "3. If the crux resolved the objective as already-satisfied or falsified but a "
+    "narrow residual is still owed (a missing regression pin, a corrected seam "
+    "anchor, a documented cross-boundary classification), LAND THE RESIDUAL PIN: "
+    "edit the test or doc file that closes the residual and commit with "
+    "`commit_reviewed`. A falsified objective converts into one reviewed commit, "
+    "never a consecutive no-op — unless no residual exists, in which case name "
+    "explicitly why none is owed in your NO_OP."
+)
+
+
 def _maybe_inject_evolution_deadline(
     round_idx: int,
     messages: List[Dict[str, Any]],
@@ -447,16 +460,8 @@ def _maybe_inject_evolution_deadline(
     notice = (
         f"[DECIDE-OR-ABSTAIN DEADLINE — round {round_idx}]\n"
         f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
-        "Reconnaissance is exhausted. You MUST now either:\n"
-        "1. Perform the intended code change via `edit_text` or `write_file` and commit with `commit_reviewed`, OR\n"
-        "2. Conclude this cycle with an explicit, honest NO_OP / ABSTAIN explanation, OR\n"
-        "3. If the crux resolved the objective as already-satisfied or falsified but a "
-        "narrow residual is still owed (a missing regression pin, a corrected seam "
-        "anchor, a documented cross-boundary classification), LAND THE RESIDUAL PIN: "
-        "edit the test or doc file that closes the residual and commit with "
-        "`commit_reviewed`. A falsified objective converts into one reviewed commit, "
-        "never a consecutive no-op — unless no residual exists, in which case name "
-        "explicitly why none is owed in your NO_OP.\n"
+        "Reconnaissance is exhausted. You MUST now choose one of the valid evolution exits:\n"
+        f"{EVOLUTION_EXIT_CONTRACT}\n"
         "Do not continue read-only exploration without making a decision."
     )
     _loop()._append_or_merge_user_message(messages, notice)
@@ -548,15 +553,9 @@ def _maybe_inject_evolution_crux_directive(
         "crux marker the objective names (the symbol, file, or phrase whose "
         "truth decides whether the work is possible). Locate that marker in the "
         "repository before any other reconnaissance. If the crux resolves the "
-        "objective as already-satisfied or falsified, do NOT simply exit: the "
-        "default exit is to LAND THE RESIDUAL PIN — if the falsification still "
-        "leaves a narrow residual owed (a missing regression pin, a corrected "
-        "seam anchor, a cross-boundary classification), edit the test or doc "
-        "that closes it and commit with commit_reviewed, so a falsified "
-        "objective converts into one reviewed commit instead of a consecutive "
-        "no-op. Only when no residual is genuinely owed may you close with an "
-        "explicit, honest NO_OP that names why none exists. Otherwise move "
-        "straight to plan_task and the edit.\n"
+        "objective as already-satisfied or falsified, do NOT simply exit:\n"
+        f"{EVOLUTION_EXIT_CONTRACT}\n"
+        "Otherwise move straight to plan_task and the edit.\n"
         "When a byte-exact window decides the edit (the anchor you will write "
         "against), pin it with compact_context(inspect=true) and keep its unit "
         "IDs and source refs — a bridge compaction can evict raw bytes from "
