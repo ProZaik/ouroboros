@@ -354,9 +354,15 @@ def _affected_paths_resolve(paths: List[str]) -> bool:
     for raw in paths:
         try:
             candidate = pathlib.Path(raw)
-            if not candidate.is_absolute():
-                candidate = repo_root / candidate
-            candidate.resolve().relative_to(repo_root)
+            if candidate.is_absolute():
+                candidate.resolve().relative_to(repo_root)
+            else:
+                resolved = (repo_root / candidate).resolve()
+                resolved.relative_to(repo_root)
+                clean_path = raw.strip().lstrip("./")
+                top_part = pathlib.Path(clean_path).parts[0] if pathlib.Path(clean_path).parts else ""
+                if not (repo_root / top_part).exists():
+                    return False
         except Exception:
             return False
     return True

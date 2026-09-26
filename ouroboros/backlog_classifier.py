@@ -107,22 +107,44 @@ _PROJECT_PATTERNS = [
 _PROJECT_REGEX = re.compile("|".join(_PROJECT_PATTERNS), re.IGNORECASE)
 
 
-def _paths_resolve_under_root(paths: List[str], root_dir: pathlib.Path) -> bool:
-    if not paths:
-        return True
-    try:
-        resolved_root = pathlib.Path(root_dir).resolve()
-    except Exception:
+def _is_foreign_path(
+    path_str: str,
+    repo_root: pathlib.Path,
+    workspace_root: str = "",
+    project_id: str = "",
+) -> bool:
+    """Classify if path belongs to a project workspace instead of Ouroboros core."""
+    clean = path_str.strip().lstrip("./")
+    if not clean:
         return False
-    for raw in paths:
+    cand = pathlib.Path(clean)
+    if cand.is_absolute():
         try:
-            cand = pathlib.Path(raw)
-            if not cand.is_absolute():
-                cand = resolved_root / cand
-            cand.resolve().relative_to(resolved_root)
-        except Exception:
+            cand.resolve().relative_to(repo_root.resolve())
             return False
-    return True
+        except Exception:
+            return True
+    if workspace_root:
+        ws_p = pathlib.Path(workspace_root) / clean
+        if ws_p.exists() and not (repo_root / clean).exists():
+            return True
+    if project_id:
+        sib_p = repo_root.parent / project_id / clean
+        if sib_p.exists() and not (repo_root / clean).exists():
+            return True
+    project_prefixes = (
+        "src/", "workspace/", "rules/", "native_libs/", "tools/", "bin/",
+        "test_workspaces/", "epic1_", "epic2_", "epic3_", "epic4_", "epic5_",
+    )
+    if clean.startswith(project_prefixes):
+        return True
+    if project_id and project_id in clean:
+        return True
+    if not (repo_root / clean).exists():
+        top_part = pathlib.Path(clean).parts[0] if pathlib.Path(clean).parts else ""
+        if not (repo_root / top_part).exists():
+            return True
+    return False
 
 
 def is_system_improvement_candidate(
@@ -159,14 +181,8 @@ def is_system_improvement_candidate(
         if affected_paths:
             from ouroboros.config import REPO_DIR
             repo_root = pathlib.Path(REPO_DIR)
-            if not _paths_resolve_under_root(affected_paths, repo_root):
-                return False
-            # Check if any path exists on disk under repo_root or starts with known project dirs
             for p in affected_paths:
-                p_clean = p.strip().lstrip("./")
-                if p_clean.startswith(("src/", "workspace/", "rules/", "native_libs/")):
-                    return False
-                if project_id and project_id in p_clean:
+                if _is_foreign_path(p, repo_root, workspace_root, project_id):
                     return False
             return True
 
@@ -183,13 +199,12 @@ def is_system_improvement_candidate(
 
     # Structural check 2: Extract referenced file paths and verify provenance
     file_paths = re.findall(r"(?:^|[\s\"'`(])([\w\-./]+\.(?:py|js|json|md|sh|yaml|yml|so|apk|cfg|toml))(?:$|[\s\"'`),:])", blob)
-    for fpath in file_paths:
-        fpath_clean = fpath.strip().lstrip("./")
-        if (
-            fpath_clean.startswith(("src/", "workspace/", "rules/", "native_libs/"))
-            or (project_id and project_id in fpath_clean)
-        ):
-            return False
+    if file_paths:
+        from ouroboros.config import REPO_DIR
+        repo_root = pathlib.Path(REPO_DIR)
+        for fpath in file_paths:
+            if _is_foreign_path(fpath, repo_root, workspace_root, project_id):
+                return False
 
     # Regex keyword fallback (BIBLE P5 conservative filter)
     if _PROJECT_REGEX.search(blob):

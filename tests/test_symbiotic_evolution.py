@@ -80,12 +80,25 @@ def test_classifier_structural_affected_paths():
     }
     assert is_system_improvement_candidate(foreign_candidate, {"project_id": "stand-appsec-pipeline"}) is False
 
-    project_explicit_candidate = {
-        "summary": "Fix logic in helper",
-        "affected_paths": ["/root/projects/stand-appsec-pipeline/src/helper.py"],
-        "category": "process",
+    project_test_candidate = {
+        "summary": "Fix test assertion in native scanner",
+        "affected_paths": ["tests/test_native_scanner.py"],
+        "category": "tooling",
     }
-    assert is_system_improvement_candidate(project_explicit_candidate, {"project_id": "stand-appsec-pipeline"}) is False
+    assert is_system_improvement_candidate(
+        project_test_candidate,
+        {"project_id": "stand-appsec-pipeline", "workspace_root": "/root/projects/stand-appsec-pipeline"},
+    ) is False
+
+    project_tools_candidate = {
+        "summary": "Fix unidbg runner wrapper",
+        "affected_paths": ["tools/unidbg-sgmain/Runner.java"],
+        "category": "tooling",
+    }
+    assert is_system_improvement_candidate(
+        project_tools_candidate,
+        {"project_id": "stand-appsec-pipeline", "workspace_root": "/root/projects/stand-appsec-pipeline"},
+    ) is False
 
 
 def test_classifier_structural_path_in_prose_without_regex_keywords():
@@ -95,6 +108,15 @@ def test_classifier_structural_path_in_prose_without_regex_keywords():
         "category": "correctness",
     }
     assert is_system_improvement_candidate(candidate, {"project_id": "stand-appsec-pipeline"}) is False
+
+    prose_test_candidate = {
+        "summary": "Fix broken fixture setup in tests/test_native_scanner.py",
+        "category": "correctness",
+    }
+    assert is_system_improvement_candidate(
+        prose_test_candidate,
+        {"project_id": "stand-appsec-pipeline", "workspace_root": "/root/projects/stand-appsec-pipeline"},
+    ) is False
 
 
 def test_update_project_improvement_backlog_writes_to_project_shelf(tmp_path, monkeypatch):

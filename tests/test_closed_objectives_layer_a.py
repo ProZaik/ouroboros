@@ -18,6 +18,8 @@ def test_affected_paths_resolve_refuses_foreign_paths():
     # Negative control: paths that cannot resolve under REPO_DIR are refused.
     assert _affected_paths_resolve(["/etc/passwd"]) is False
     assert _affected_paths_resolve(["../outside/other_project.py"]) is False
+    assert _affected_paths_resolve(["src/master/native_scanner.py"]) is False
+    assert _affected_paths_resolve(["rules/learned/hook.js"]) is False
     # A real in-repo relative path resolves.
     assert _affected_paths_resolve(["ouroboros/post_task_evolution.py"]) is True
     assert _affected_paths_resolve([str(pathlib.Path(REPO_DIR) / "VERSION")]) is True
