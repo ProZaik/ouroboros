@@ -29,6 +29,22 @@ def _ensure_remote_key(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _pin_safety_mode_full(monkeypatch):
+    """Pin the safety layer to full mode so the assertions below are hermetic.
+
+    ouroboros.safety.check_safety() consults get_safety_mode() before running
+    its LLM check; an ambient OUROBOROS_SAFETY_MODE=off (a real developer
+    setting - see safety.py's _emit_safety_mode_skip) short-circuits that call,
+    so the rate-limit tests below would silently stop exercising it and fail on
+    a call-count assertion. Pin both the env var and the read site so no
+    ambient setting can flip the behaviour these tests assert.
+    """
+    monkeypatch.setenv("OUROBOROS_SAFETY_MODE", "full")
+    import ouroboros.safety as safety
+    monkeypatch.setattr(safety, "get_safety_mode", lambda: "full")
+
+
 def _patch_llm_client(monkeypatch, stub) -> None:
     import ouroboros.safety as safety
     from ouroboros.llm import LLMClient

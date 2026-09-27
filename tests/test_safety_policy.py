@@ -31,6 +31,22 @@ def _ensure_remote_key(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _pin_safety_mode_full(monkeypatch):
+    """Pin the safety layer to full mode so the assertions below are hermetic.
+
+    ouroboros.safety.check_safety() consults get_safety_mode() before running
+    its LLM check; an ambient OUROBOROS_SAFETY_MODE=off (a real developer
+    setting - see safety.py's _emit_safety_mode_skip) short-circuits that call,
+    so the LLM-check tests below would silently stop exercising it and fail on
+    a call-count assertion. Pin both the env var and the read site so no
+    ambient setting can flip the behaviour these tests assert.
+    """
+    monkeypatch.setenv("OUROBOROS_SAFETY_MODE", "full")
+    import ouroboros.safety as safety
+    monkeypatch.setattr(safety, "get_safety_mode", lambda: "full")
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -752,11 +768,16 @@ def test_check_conditional_is_only_process_tools():
     """POLICY_CHECK_CONDITIONAL applies only to command-running tools; another tool
     using it must extend the safe-subject extraction in _run_llm_check or it would
     silently bypass the LLM via the shell whitelist. verify_and_record runs its
-    declared `check` like run_command (its `check` arg IS wired into the extractor)."""
+    declared `check` like run_command (its `check` arg IS wired into the extractor).
+    `terminal` is a registered alias of run_command (same _run_shell handler, same
+    `cmd`-keyed schema, same is_code_tool/mutates_worktree flags), so it reads the
+    safe subject through the identical default `arguments.get("cmd", ...)` branch
+    and MUST carry the same policy — without it, it falls through to DEFAULT_POLICY
+    and pays an LLM call per invocation."""
     from ouroboros.safety import TOOL_POLICY, POLICY_CHECK_CONDITIONAL
 
     conditional = {n for n, p in TOOL_POLICY.items() if p == POLICY_CHECK_CONDITIONAL}
-    assert conditional == {"run_command", "run_script", "start_service", "verify_and_record"}, (
+    assert conditional == {"run_command", "run_script", "start_service", "verify_and_record", "terminal"}, (
         "Extend _run_llm_check if you add another check_conditional tool; "
         f"found: {conditional}"
     )

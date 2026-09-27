@@ -166,6 +166,11 @@ TOOL_POLICY: Dict[str, str] = {
 
     # Conditional: run_command safe-subject whitelist.
     "run_command": POLICY_CHECK_CONDITIONAL,
+    # `terminal` is a registered alias of run_command (same handler, same
+    # is_code_tool/mutates_worktree flags) — see ouroboros/tools/shell.py's
+    # ToolEntry(alias_for="run_command"). It must carry the same policy or it
+    # silently falls through to DEFAULT_POLICY and pays an LLM call per call.
+    "terminal": POLICY_CHECK_CONDITIONAL,
     "run_script": POLICY_CHECK_CONDITIONAL,
     # verify_and_record runs the agent's declared `check` command like run_command,
     # so it carries the same conditional safe-subject gate over that command (FR3).
