@@ -788,3 +788,36 @@ def test_owner_safety_mode_response_in_frozen_contract():
 
     assert "OwnerSafetyModeResponse" in contracts.__all__
     assert set(contracts.OwnerSafetyModeResponse.__annotations__) == {"ok", "safety_mode"}
+# ---------------------------------------------------------------------------
+# 1.7 — durable safety event: a present-but-invalid event_queue target is
+#       named loudly, never silently swallowed (campaign 210269f0 cycle #84)
+
+
+def test_durable_safety_event_names_a_non_queue_event_queue_target(caplog):
+    """A plain object as event_queue must not raise, and must be named.
+
+    The fallback validated presence (`eq is not None`) but not interface, so a
+    plain object passed the gate and `eq.put_nowait` raised AttributeError that
+    the broad except swallowed — the durable safety-audit row was lost with only
+    a generic traceback. The interface is now validated and the invalid target
+    is named with its type.
+    """
+    ctx = SimpleNamespace(task_id="t-nonqueue", event_queue=object())
+    with caplog.at_level("ERROR", logger=safety_mod.log.name):
+        safety_mod._emit_durable_safety_event(ctx, {"type": "waved_through"})
+    assert "no callable put_nowait" in caplog.text
+    assert "object" in caplog.text
+
+
+def test_durable_safety_event_still_delivers_to_a_real_queue():
+    """Positive control: a real Queue target still receives the payload.
+
+    Guards against the fix turning the fallback into a dead branch — the
+    interface check must not reject a genuine queue.
+    """
+    q: queue.Queue = queue.Queue()
+    ctx = SimpleNamespace(task_id="t-queue", event_queue=q)
+    safety_mod._emit_durable_safety_event(ctx, {"type": "waved_through"})
+    payload = q.get_nowait()
+    assert payload["type"] == "waved_through"
+    assert payload["task_id"] == "t-queue"

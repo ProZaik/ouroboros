@@ -1295,7 +1295,16 @@ def _emit_durable_safety_event(ctx: Optional[Any], event: Dict[str, Any]) -> Non
             )
         eq = getattr(ctx, "event_queue", None) if ctx is not None else None
         if eq is not None:
-            eq.put_nowait(payload)
+            put_nowait = getattr(eq, "put_nowait", None)
+            if callable(put_nowait):
+                put_nowait(payload)
+            else:
+                log.error(
+                    "Durable safety event dropped: event_queue target %r "
+                    "(type=%s) has no callable put_nowait",
+                    eq,
+                    type(eq).__name__,
+                )
     except Exception:
         # The durable audit is a P3 invariant for waved-through safety decisions —
         # a lost emit must not be TRULY silent. Never fatal (a failed audit write
