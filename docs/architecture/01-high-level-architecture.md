@@ -475,6 +475,7 @@ server.py (Starlette+uvicorn) ← HTTP + WebSocket on configurable host:port (de
       │   ├── project_journal.py ← journal_write/read, workpad_read/write, journal_tail_digest (over-limit rejected); owns `mirror_tree_coordination_to_journal`
       │   ├── presence.py      ← configure_presence, initiate_presence, typed completion/cancel
       │   ├── task_tree.py     ← tree_note/tree_read (storage SSOT: task_tree_ledger.py)
+       │   ├── evolution_decision.py ← evolution_decision: the model's typed in-loop declaration that the current evolution objective is falsified, so the round-10 deadline branch renders the strong residual-pin notice instead of a no-op (ibl-1eca01304e56)
       │   ├── followup.py      ← One deferred follow-up into `state/scheduled_tasks.json`: exactly one trigger (`once` ISO or 5-field cron+tz), cap 2 pending; preserves the SOURCE address (`project_id` plus the originating `chat_id`) instead of defaulting to the global owner chat; a one-shot is consumed on the typed tombstoned-Project refusal, while a deleting Project and transient refusals stay retryable
       │   ├── join_ledger.py   ← Child-result absorption: validates lineage + exact hashes; dispositions integrated/irrelevant/deferred; `CHILD_RESULT_STALE`; keeps peek_task/discard_child_result
       │   ├── delegate.py      ← Delegation facade verbs `delegate_start` (with `retry_of`), `delegate_wait`, `delegate_cancel`, `delegate_answer`; the host pre-start rides the same wrapper and the shared `subagent_runtime.exact_start` (§6 Delegated subagents)
