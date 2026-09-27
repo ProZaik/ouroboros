@@ -22,6 +22,38 @@ from ouroboros.tools.registry import ToolContext
 from ouroboros.tools.tool_result import ToolResult, _publish_tool_result
 
 
+def _resolve_send_path(ctx: Any, file_path: str):
+    """Resolve a send_* file_path, retrying a relative miss against the write_file landing root.
+
+    Absolute paths keep their existing resolution behavior. A RELATIVE path that
+    does not resolve against the process cwd is retried through
+    ``resolve_user_file_path`` — the same resolver ``write_file(root="user_files")``
+    lands files through — so a deliverable written with a relative name is
+    immediately sendable with that same name (incident: task 79c31b14).
+    Returns ``(resolved_path_or_None, tried_paths)``.
+    """
+    tried = []
+    fp = pathlib.Path(file_path).expanduser().resolve()
+    tried.append(fp)
+    if fp.exists():
+        return fp, tried
+    if not pathlib.Path(file_path).is_absolute():
+        candidate = None
+        try:
+            from ouroboros.tool_access_user_files import resolve_user_file_path
+
+            candidate = resolve_user_file_path(ctx, file_path)
+        except ValueError:
+            # resolve_user_file_path raises UserFilesPathBlockedError (a ValueError) when
+            # the relative name is not a legal user_files target; that is a miss, not a crash.
+            candidate = None
+        if candidate is not None:
+            tried.append(candidate)
+            if candidate.exists():
+                return candidate, tried
+    return None, tried
+
+
 _MAX_PHOTO_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
@@ -49,9 +81,9 @@ def _send_photo(ctx: ToolContext, file_path: str = "", image_base64: str = "",
     mime = "image/png"
 
     if file_path:
-        fp = pathlib.Path(file_path).expanduser().resolve()
-        if not fp.exists():
-            return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File not found: {file_path}"))
+        fp, _tried = _resolve_send_path(ctx, file_path)
+        if fp is None:
+            return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File not found: {file_path} (tried: {', '.join(str(p) for p in _tried)})"))
         if fp.stat().st_size > _MAX_PHOTO_FILE_BYTES:
             return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File too large ({fp.stat().st_size} bytes). Max: {_MAX_PHOTO_FILE_BYTES} bytes."))
         try:
@@ -108,9 +140,9 @@ def _send_video(ctx: ToolContext, file_path: str = "", caption: str = "") -> str
     if not file_path:
         return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text="⚠️ Provide a file_path."))
 
-    fp = pathlib.Path(file_path).expanduser().resolve()
-    if not fp.exists():
-        return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File not found: {file_path}"))
+    fp, _tried = _resolve_send_path(ctx, file_path)
+    if fp is None:
+        return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File not found: {file_path} (tried: {', '.join(str(p) for p in _tried)})"))
     if fp.stat().st_size > _MAX_VIDEO_FILE_BYTES:
         return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File too large ({fp.stat().st_size} bytes). Max: {_MAX_VIDEO_FILE_BYTES} bytes."))
 
@@ -150,9 +182,9 @@ def _send_file(ctx: ToolContext, file_path: str = "", caption: str = "") -> str:
     if not file_path:
         return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text="⚠️ Provide a file_path."))
 
-    fp = pathlib.Path(file_path).expanduser().resolve()
-    if not fp.exists() or not fp.is_file():
-        return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File not found: {file_path}"))
+    fp, _tried = _resolve_send_path(ctx, file_path)
+    if fp is None or not fp.is_file():
+        return _publish_tool_result(ctx, ToolResult(status="error", code="LEGACY_TOOL_ERROR", text=f"⚠️ File not found: {file_path} (tried: {', '.join(str(p) for p in _tried)})"))
     mime = _detect_document_mime(str(fp))
     # Capture immutable, task-owned bytes before publishing a link. File delivery
     # stays available above the old inline limit without placing the file in RAM.
