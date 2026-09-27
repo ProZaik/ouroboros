@@ -313,6 +313,12 @@ def _install_fakes(stack: contextlib.ExitStack, recorder: _Recorder, spec: Dict[
     stack.enter_context(mock.patch("openai.AsyncOpenAI", async_cls))
     stack.enter_context(mock.patch.object(httpx, "Client", httpx_cls))
     stack.enter_context(mock.patch.object(httpx, "AsyncClient", httpx_cls))
+    try:
+        import httpx2
+        stack.enter_context(mock.patch.object(httpx2, "Client", httpx_cls))
+        stack.enter_context(mock.patch.object(httpx2, "AsyncClient", httpx_cls))
+    except ImportError:
+        pass
     if spec.get("model_operation"):
         _install_model_operation_fake(stack, recorder, spec)
 

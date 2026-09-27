@@ -9,8 +9,10 @@ from __future__ import annotations
 import inspect
 import os
 import pathlib
-
+import re
 from dataclasses import dataclass
+
+from ouroboros.tool_access_types import _ALL_ROOTS
 
 from typing import TYPE_CHECKING
 
@@ -295,6 +297,14 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "filename": "path",
         "name": "skill_name",
     },
+    "list_files": {
+        "dir": "path",
+        "directory": "path",
+        "folder": "path",
+        "name": "path",
+        "file": "path",
+        "file_path": "path",
+    },
     "write_file": {
         "file": "path",
         "file_path": "path",
@@ -313,6 +323,9 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "new_text": "new_str",
     },
     "search_code": {
+        "dir": "path",
+        "directory": "path",
+        "folder": "path",
         "pattern": "query",
         "search": "query",
         "text": "query",
@@ -337,6 +350,10 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "parent_task_id": "predecessor_task_id",
         "task_id": "predecessor_task_id",
         "predecessor": "predecessor_task_id",
+    },
+    "plan_task": {
+        "task": "plan",
+        "description": "plan",
     },
 }
 
@@ -436,23 +453,99 @@ def _entry_has_public_param_schema(entry: "ToolEntry") -> bool:
         return False
 
 
+_DSML_MARKER_RE = re.compile(
+    r"</?[｜|]?DSML[｜|]?[^>]*>?"
+    r"|<[｜|][^｜|>]+[｜|]>?"
+    r"|[｜|]DSML[｜|][\w>]*"
+    r"|[｜|](?:end|begin)[▁_ ]of[▁_ ]sentence[｜|]"
+    r"|[｜|]fim[▁_ ][^｜|]+[｜|]"
+)
+
+
+def _sanitize_dsml_val(val: Any, key: str = "") -> Any:
+    is_path_like = key in {"path", "dir", "root", "file", "filename", "file_path", "bucket", "skill_name", "cwd"}
+    if isinstance(val, str):
+        cleaned = _DSML_MARKER_RE.sub("", val)
+        if is_path_like:
+            cleaned = cleaned.strip(" \t\n\r|｜\"'")
+        return cleaned
+    if isinstance(val, dict):
+        return {k: _sanitize_dsml_val(v, k) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_sanitize_dsml_val(item, key) for item in val]
+    return val
+
+
+def _sanitize_tool_args_dsml(args: dict[str, Any]) -> None:
+    for k in list(args.keys()):
+        val = args.pop(k)
+        clean_k = _DSML_MARKER_RE.sub("", k).strip(" \t\n\r|｜\"'") if isinstance(k, str) else k
+        if clean_k:
+            args[clean_k] = _sanitize_dsml_val(val, clean_k)
+
+
 def _normalize_tool_call_args(entry: "ToolEntry", args: dict[str, Any]) -> None:
     tool_name = entry.name
     accepted = set(_entry_public_params(entry))
+
+    # 1. Sanitize DSML marker fragments and clean paths/roots
+    _sanitize_tool_args_dsml(args)
+
+    # 2. Check root literal-prefix and path root:path separation
+    if "root" in args and isinstance(args["root"], str):
+        root_val = args["root"].strip()
+        if root_val not in _ALL_ROOTS:
+            for r in sorted(_ALL_ROOTS, key=len, reverse=True):
+                if root_val.startswith(r) and (len(root_val) == len(r) or not root_val[len(r)].isalnum()):
+                    args["root"] = r
+                    break
+
+    for pkey in ("path", "dir"):
+        if pkey in args and isinstance(args[pkey], str):
+            pval = args[pkey]
+            head, sep, tail = pval.partition(":")
+            if sep and head in _ALL_ROOTS:
+                if "root" not in args or not args.get("root"):
+                    args["root"] = head
+                args[pkey] = tail
+
+    # 3. Apply aliases
     aliases: dict[str, str] = {}
     aliases.update(_TOOL_ARG_ALIASES.get("*", {}))
     aliases.update(_TOOL_ARG_ALIASES.get(tool_name, {}))
     for alias, canonical in aliases.items():
         if alias in args and canonical in accepted and alias not in accepted and canonical not in args:
             args[canonical] = args.pop(alias)
+
+    # 4. Special cases
     if tool_name in _IGNORE_ROOT_ARG_TOOLS and "root" in args and "root" not in accepted:
         args.pop("root", None)
     if tool_name in ("promote_chat_to_task", "route_to_project") and "predecessor_task_id" in accepted:
         if "predecessor_task_id" not in args or args.get("predecessor_task_id") is None:
             args["predecessor_task_id"] = ""
+    if tool_name == "verify_and_record" and "check" in args:
+        check_val = args.get("check")
+        if isinstance(check_val, dict):
+            extracted = check_val.get("cmd") or check_val.get("command") or check_val.get("check")
+            if extracted is not None:
+                args["check"] = extracted
+    if tool_name == "plan_task":
+        spec_val = args.get("spec")
+        if isinstance(spec_val, dict):
+            if "affected_paths" not in spec_val:
+                if "affected_files" in spec_val:
+                    spec_val["affected_paths"] = spec_val.pop("affected_files")
+                elif "files" in spec_val:
+                    spec_val["affected_paths"] = spec_val.pop("files")
+                elif "paths" in spec_val:
+                    spec_val["affected_paths"] = spec_val.pop("paths")
+                else:
+                    spec_val["affected_paths"] = []
+        elif "spec" not in args and "plan" in args:
+            args["spec"] = {"affected_paths": []}
 
 
-def _prepare_public_builtin_args(entry: "ToolEntry", args: dict[str, Any]) -> str:
+def _prepare_public_builtin_args(entry: "ToolEntry", args: dict[str, Any], ctx: Any = None) -> str:
     """Normalize and validate only the model-visible builtin argument surface.
 
     This runs after capability/lineage availability checks but before path
@@ -474,8 +567,9 @@ def _prepare_public_builtin_args(entry: "ToolEntry", args: dict[str, Any]) -> st
         if str(name)
     }
     accepted_params = public_params | hidden_legacy
+    err = ""
     if _entry_has_public_param_schema(entry) and any(key not in accepted_params for key in args):
-        return _format_tool_arg_error(
+        err = _format_tool_arg_error(
             entry,
             rejected=tuple(sorted(
                 str(key)
@@ -483,10 +577,37 @@ def _prepare_public_builtin_args(entry: "ToolEntry", args: dict[str, Any]) -> st
                 if key not in accepted_params and not str(key).startswith("_")
             )),
         )
-    try:
-        inspect.signature(entry.handler).bind(object(), **args)
-    except TypeError:
-        return _format_tool_arg_error(entry)
+    else:
+        try:
+            inspect.signature(entry.handler).bind(object(), **args)
+        except TypeError:
+            err = _format_tool_arg_error(entry)
+
+    if err:
+        if ctx is not None:
+            import json
+            try:
+                error_key = (entry.name, json.dumps(args, sort_keys=True, default=str))
+            except Exception:
+                error_key = (entry.name, str(sorted(args.items())))
+
+            recent = getattr(ctx, "_recent_tool_arg_errors", None)
+            if recent is None:
+                ctx._recent_tool_arg_errors = []
+                recent = ctx._recent_tool_arg_errors
+
+            if error_key in recent:
+                params = _entry_public_params(entry)
+                accepted = ", ".join(params) if params else "none"
+                return (
+                    f"⚠️ REPEATED_ARGUMENT_ERROR ({entry.name}): identical malformed arguments were already rejected. "
+                    f"Do not repeat the same call without fixing arguments. Accepted parameters: {accepted}."
+                )
+            recent.append(error_key)
+            if len(recent) > 50:
+                del recent[0]
+        return err
+
     return ""
 
 

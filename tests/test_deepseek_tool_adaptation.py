@@ -268,4 +268,111 @@ def func_two():
     assert refreshed is None
 
 
+def test_dsml_marker_sanitization_in_tool_args(tmp_path):
+    """ibl-1a54916dc5fe / ibl-f208daef458a: sanitize stray DSML tokens from tool args."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry = registry._entries.get("read_file")
+    assert entry is not None
+
+    args = {
+        "path": "runtime_data:memory/knowledge/improvement-backlog.md｜DSML｜parameter>",
+        "root": "runtime_data｜DSML｜",
+    }
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == "", f"Expected success but got: {err}"
+    assert args["root"] == "runtime_data"
+    assert args["path"] == "memory/knowledge/improvement-backlog.md"
+
+
+def test_root_path_colon_separation_and_prefix_check(tmp_path):
+    """ibl-1a54916dc5fe: separate root:path prefix and detect literal root prefixes."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry = registry._entries.get("search_code")
+    assert entry is not None
+
+    args = {
+        "query": "some_func",
+        "path": "active_workspace:src/main.py",
+    }
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == "", f"Expected success but got: {err}"
+    assert args["root"] == "active_workspace"
+    assert args["path"] == "src/main.py"
+
+
+def test_additional_tool_arg_aliases(tmp_path):
+    """ibl-2556760eae99: aliases for list_files, search_code, plan_task."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+
+    # list_files with name or dir
+    entry = registry._entries.get("list_files")
+    assert entry is not None
+    args1 = {"name": "subfolder"}
+    err1 = _prepare_public_builtin_args(entry, args1)
+    assert err1 == ""
+    assert args1.get("path") == "subfolder"
+    assert "name" not in args1
+
+    args2 = {"dir": "subfolder2"}
+    err2 = _prepare_public_builtin_args(entry, args2)
+    assert err2 == ""
+    assert args2.get("path") == "subfolder2"
+    assert "dir" not in args2
+
+    # search_code with dir
+    entry_search = registry._entries.get("search_code")
+    assert entry_search is not None
+    args_search = {"query": "test", "dir": "pkg"}
+    err_search = _prepare_public_builtin_args(entry_search, args_search)
+    assert err_search == ""
+    assert args_search.get("path") == "pkg"
+    assert "dir" not in args_search
+
+    # plan_task with task / description
+    entry_plan = registry._entries.get("plan_task")
+    assert entry_plan is not None
+    args_plan = {"goal": "achieve X", "task": "step 1 then step 2"}
+    err_plan = _prepare_public_builtin_args(entry_plan, args_plan)
+    assert err_plan == ""
+    assert args_plan.get("plan") == "step 1 then step 2"
+    assert "task" not in args_plan
+    assert "spec" in args_plan
+    assert args_plan["spec"]["affected_paths"] == []
+
+
+def test_verify_and_record_dict_wrapped_check(tmp_path):
+    """ibl-d5d2291e525f: dict-wrapped check in verify_and_record is normalized."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry = registry._entries.get("verify_and_record")
+    assert entry is not None
+
+    args = {
+        "contract_kind": "explicit_command",
+        "check": {"cmd": "pytest -q tests/test_foo.py"},
+    }
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == "", f"Expected success but got: {err}"
+    assert args["check"] == "pytest -q tests/test_foo.py"
+
+
+def test_repeated_argument_error_detection(tmp_path):
+    """ibl-1be732176468: detect byte-identical tool-arg error repetition."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry = registry._entries.get("read_file")
+    assert entry is not None
+
+    # Missing required argument 'path'
+    args1 = {"nonexistent_arg": "foo"}
+    err1 = _prepare_public_builtin_args(entry, args1, ctx=registry._ctx)
+    assert "TOOL_ARG_ERROR" in err1
+    assert "unsupported argument(s): nonexistent_arg" in err1
+
+    # Call again with identical invalid args
+    args2 = {"nonexistent_arg": "foo"}
+    err2 = _prepare_public_builtin_args(entry, args2, ctx=registry._ctx)
+    assert "REPEATED_ARGUMENT_ERROR" in err2
+    assert "identical malformed arguments were already rejected" in err2
+
+
+
 

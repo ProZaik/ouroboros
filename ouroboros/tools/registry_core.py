@@ -1086,7 +1086,7 @@ class ToolRegistry:
                 "Ouroboros repo, runtime data, or control plane."
             ))
         if entry is not None:
-            public_arg_error = tool_resolution._prepare_public_builtin_args(entry, args)
+            public_arg_error = tool_resolution._prepare_public_builtin_args(entry, args, ctx=self._ctx)
             if public_arg_error:
                 return public_arg_error
             path_normalization = tool_resolution._normalize_dispatch_path_args_result(self._ctx, name, args)

@@ -12,7 +12,7 @@
 [![Linux](https://img.shields.io/badge/Linux-x86__64-orange.svg)](https://ouroboros-agent.ai/install/#linux)
 [![Windows](https://img.shields.io/badge/Windows-x64-blue.svg)][download-windows-x64]
 [![OuroborosHub](https://img.shields.io/badge/OuroborosHub-skills%20marketplace-8A2BE2.svg)](https://github.com/razzant/OuroborosHub)
-[![Version 7.4.26](https://img.shields.io/badge/version-7.4.26-green.svg)](VERSION)
+[![Version 7.4.27](https://img.shields.io/badge/version-7.4.27-green.svg)](VERSION)
 
 Ouroboros is an open-source, general-purpose AI agent whose identity, durable memory, and history continue across tasks and restarts. It works on external projects, coordinates a live swarm of specialist agents, and can rewrite the implementation it runs on, including its code, architecture, prompts, tools, and dependencies. Reflection can also change how it understands itself without severing that continuity.
 
@@ -66,13 +66,13 @@ The desktop packages already contain an optional CLI installer. On macOS, after 
 
 </details>
 
-[download-macos-arm64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/Ouroboros-7.4.26.dmg
-[download-windows-x64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/Ouroboros-7.4.26-windows-x64.zip
-[download-linux-deb-amd64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/ouroboros_7.4.26_amd64.deb
-[download-linux-rpm-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/ouroboros-7.4.26-1.x86_64.rpm
-[download-linux-rpm-red80-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/ouroboros-7.4.26-1.red80.x86_64.rpm
-[download-linux-appimage-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/Ouroboros-7.4.26-linux-x86_64.AppImage
-[download-linux-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.26/Ouroboros-7.4.26-linux-x86_64.tar.gz
+[download-macos-arm64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/Ouroboros-7.4.27.dmg
+[download-windows-x64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/Ouroboros-7.4.27-windows-x64.zip
+[download-linux-deb-amd64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/ouroboros_7.4.27_amd64.deb
+[download-linux-rpm-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/ouroboros-7.4.27-1.x86_64.rpm
+[download-linux-rpm-red80-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/ouroboros-7.4.27-1.red80.x86_64.rpm
+[download-linux-appimage-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/Ouroboros-7.4.27-linux-x86_64.AppImage
+[download-linux-x86_64]: https://github.com/razzant/ouroboros/releases/download/v7.4.27/Ouroboros-7.4.27-linux-x86_64.tar.gz
 
 Ouroboros bundles [Claudexor](https://github.com/razzant/claudexor) as its local execution layer for delegated coding and hosted-agent review. Ouroboros owns the task, memory, review, and final integration, while Claudexor runs the selected connected coding harness and returns durable execution evidence. [Explore Claudexor](https://claudexor.ai/).
 
@@ -452,6 +452,7 @@ and the reason.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 7.4.27 | 2026-09-27 | feat(tools): DSML token sanitization, tool arg aliases, verify/plan shape preflight, duplicate arg error guard (ibl-2556760eae99, ibl-1be732176468, ibl-d5d2291e525f, ibl-1a54916dc5fe, ibl-f208daef458a, ibl-5381bab05fee) |
 | 7.4.26 | 2026-09-27 | fix(tools): resolve a relative send_file path against the write_file user_files landing root |
 | 7.4.25 | 2026-09-27 | fix(safety): validate the event_queue interface in the durable safety-event fallback (v7.4.25) |
 | 7.4.24 | 2026-09-27 | test(safety): pin OUROBOROS_SAFETY_MODE=full in the safety-policy and rate-limit suites, and give the terminal alias its run_command policy entry |
