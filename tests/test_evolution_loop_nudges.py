@@ -288,4 +288,80 @@ def test_crux_directive_followed_by_falsification_transitions_to_bounded_decisio
     assert "LAND THE RESIDUAL PIN" in text
 
 
+class _Ctx:
+    """Minimal context stub carrying the fields the tool handler reads."""
+
+    def __init__(self, task_type, accumulated_usage):
+        self.current_task_type = task_type
+        self._accumulated_usage = accumulated_usage
+
+
+def test_evolution_decision_tool_makes_strong_branch_reachable():
+    """ibl-1eca01304e56-successor: the typed in-loop falsification signal makes the
+    strong residual-pin deadline branch reachable end-to-end in production.
+
+    Before the `evolution_decision` tool existed, `falsified_objective` /
+    `falsification_evidence` were written nowhere outside this test file, so the
+    deadline branch at loop_nudges ~504-511 was dead. This exercises the real
+    handler -> ctx._accumulated_usage -> _maybe_inject_evolution_deadline path.
+    """
+    from ouroboros.loop_nudges import (
+        get_evolution_decision_step,
+        _maybe_inject_evolution_crux_directive,
+        _maybe_inject_evolution_deadline,
+    )
+    from ouroboros.tools.evolution_decision import _evolution_decision
+
+    accumulated_usage = {}
+    messages = []
+    ctx = _Ctx("evolution", accumulated_usage)
+
+    # Round 1: crux directive initializes the undecided step.
+    _maybe_inject_evolution_crux_directive(1, messages, accumulated_usage, task_type="evolution")
+    assert get_evolution_decision_step(accumulated_usage).exit_type == "undecided"
+
+    # The model declares falsification through the NEW typed tool surface.
+    result = _evolution_decision(
+        ctx,
+        falsified=True,
+        reason="API already removed in 7.4.20",
+        residual_owed=True,
+        target="ouroboros/loop_nudges.py::_maybe_inject_evolution_deadline",
+    )
+    assert "exit_type=residual_pin" in result
+    assert accumulated_usage["falsified_objective"] is True
+    assert accumulated_usage["falsification_evidence"] == "API already removed in 7.4.20"
+    assert accumulated_usage["residual_owed"] is True
+
+    # Round 10: the deadline now renders the STRONG residual-pin notice.
+    llm_trace = {"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]}
+    fired = _maybe_inject_evolution_deadline(
+        10, messages, accumulated_usage, llm_trace=llm_trace, task_type="evolution",
+    )
+    assert fired is True
+    text = messages[-1]["content"]
+    assert "[BOUNDED DECISION DEADLINE" in text
+    assert "LAND THE RESIDUAL PIN" in text
+
+
+def test_evolution_decision_tool_refuses_outside_evolution():
+    """ibl-1eca01304e56-successor: the signal is typed-refused off evolution tasks."""
+    from ouroboros.tools.evolution_decision import _evolution_decision
+
+    ctx = _Ctx("task", {})
+    result = _evolution_decision(ctx, falsified=True, reason="x")
+    assert result.startswith("REFUSED")
+
+
+def test_evolution_decision_tool_refuses_without_accumulated_usage():
+    """ibl-1eca01304e56-successor: no accumulated_usage -> typed refusal, no crash."""
+    from ouroboros.tools.evolution_decision import _evolution_decision
+
+    class _Bare:
+        current_task_type = "evolution"
+
+    result = _evolution_decision(_Bare(), falsified=True, reason="x")
+    assert result.startswith("REFUSED")
+
+
 
