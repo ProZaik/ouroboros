@@ -66,13 +66,17 @@ def sections(manifest, graph):
 
 def test_manifest_covers_the_tracked_population_exactly(manifest):
     tracked = tracked_population(REPO_ROOT)
-    missing = sorted(tracked - set(manifest.modules))
-    stale = sorted(set(manifest.modules) - tracked)
-    assert not missing, (
-        "tracked runtime modules without a domain row (add them to "
-        f"ouroboros/domains.toml [modules]): {missing}")
-    assert not stale, (
-        f"manifest rows that are no longer tracked modules (remove them): {stale}")
+    findings = check_domains.coverage_findings(manifest, tracked)
+    assert not findings, (
+        "domain manifest completeness violations (tracked modules without a "
+        f"[modules] row, or rows that are no longer tracked): {findings}")
+
+
+def test_coverage_findings_names_an_orphan_tracked_module(manifest):
+    tracked = set(manifest.modules) | {"ouroboros/orphan_synthetic_coverage.py"}
+    findings = check_domains.coverage_findings(manifest, tracked)
+    assert any("ouroboros/orphan_synthetic_coverage.py" in f for f in findings), findings
+    assert all(f.startswith("completeness:") for f in findings)
 
 
 def test_every_module_maps_to_a_known_domain(manifest):

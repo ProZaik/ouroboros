@@ -216,6 +216,16 @@ def render_domain_map(manifest: Manifest) -> str:
     return "\n".join(L)
 
 
+def coverage_findings(manifest, tracked: set[str]) -> list[str]:
+    """Single owner of the manifest-completeness diagnostic: a tracked runtime module with no [modules] row, or a manifest row with no tracked module. Returns the red finding strings (empty list = clean)."""
+    findings: list[str] = []
+    for path in sorted(tracked - set(manifest.modules)):
+        findings.append(f"completeness: tracked module has no manifest row: {path}")
+    for path in sorted(set(manifest.modules) - tracked):
+        findings.append(f"completeness: manifest row is not a tracked module: {path}")
+    return findings
+
+
 def run_checks(root: pathlib.Path = REPO_ROOT) -> tuple[list[str], list[str]]:
     """Returns (findings, notes). Structural problems raise."""
     manifest = load_manifest()
@@ -228,10 +238,7 @@ def run_checks(root: pathlib.Path = REPO_ROOT) -> tuple[list[str], list[str]]:
         return findings, notes
 
     tracked = tracked_population(root)
-    for path in sorted(tracked - set(manifest.modules)):
-        findings.append(f"completeness: tracked module has no manifest row: {path}")
-    for path in sorted(set(manifest.modules) - tracked):
-        findings.append(f"completeness: manifest row is not a tracked module: {path}")
+    findings.extend(coverage_findings(manifest, tracked))
     if findings:
         # The graph below is only meaningful over a complete population.
         return findings, notes
