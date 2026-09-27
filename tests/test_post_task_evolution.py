@@ -116,6 +116,22 @@ def test_v5_eligibility_and_canonical():
     assert pte._is_canonical_run(env, {"budget_drive_root": "/x/data"}) is True
 
 
+def test_v5_eligible_refuses_foreign_workspace_tree():
+    """Origin scope: a task whose working tree is not the canonical system repo
+    may not propose a system_repo objective, independent of affected_paths.
+
+    Negative control: remove the workspace check in _eligible and this goes red.
+    """
+    from ouroboros.config import REPO_DIR
+
+    # Foreign tree, empty affected_paths -- refused on origin, not on payload.
+    assert pte._eligible(
+        {"type": "task", "workspace_root": "/tmp/some-foreign-tree"}
+    ) is False
+    # Canonical repo tree remains eligible.
+    assert pte._eligible({"type": "task", "workspace_root": str(REPO_DIR)}) is True
+
+
 def test_v5_every_n_counter(tmp_path):
     # k=2 -> due on the 2nd, 4th call
     assert pte._counter_due(tmp_path, 2) is False

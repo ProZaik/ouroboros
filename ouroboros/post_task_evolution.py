@@ -76,6 +76,18 @@ def _eligible(task: Dict[str, Any]) -> bool:
     # either — otherwise Act would reach a campaign through one indirection.
     if "toggle_evolution" in task_disabled_tools(task):
         return False
+    # Origin scope (authority, not self-report): a task whose working tree is not
+    # the canonical system repo may not mint a system_repo objective. Keyed on the
+    # task's own tree, independent of affected_paths -- an empty list must not opt
+    # a foreign-tree task out. Class behind cycles #62/#70/#77.
+    workspace = str(task.get("workspace_root") or "").strip()
+    if workspace:
+        try:
+            pathlib.Path(workspace).resolve(strict=False).relative_to(
+                pathlib.Path(REPO_DIR).resolve(strict=False)
+            )
+        except (OSError, ValueError):
+            return False
     return True
 
 
