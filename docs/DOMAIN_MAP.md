@@ -13,7 +13,7 @@ The manifest is the SSOT of the module→domain assignment (1:1, complete over t
 | D03 | Context assembly, fit & compaction | 11 | 0 |
 | D04 | Tool execution: registry, access & typed results | 21 | 0 |
 | D05 | Tool surfaces: files, code, shell, media, external | 28 | 0 |
-| D06 | Review stack | 67 | 0 |
+| D06 | Review stack | 68 | 0 |
 | D07 | Delegation, subagents & Claudexor | 52 | 0 |
 | D08 | Supervisor: queue, workers, events & runtime control | 46 | 0 |
 | D09 | Cancellation, owner control & process custody | 13 | 0 |
@@ -22,13 +22,13 @@ The manifest is the SSOT of the module→domain assignment (1:1, complete over t
 | D12 | Settings & configuration | 15 | 0 |
 | D13 | Safety, guards & runtime mode | 9 | 0 |
 | D14 | Skills & extensions | 54 | 0 |
-| D15 | Memory, knowledge, consciousness & self-evolution | 21 | 0 |
+| D15 | Memory, knowledge, consciousness & self-evolution | 22 | 0 |
 | D16 | Observability, usage accounting & cost | 11 | 0 |
 | D17 | Projects, workspaces & task results | 21 | 0 |
 | D18 | Launcher, packaging, platform & shared substrate | 33 | 0 |
 | D19 | Frozen contracts (ABI) | 10 | 0 |
 | D20 | Presence | 10 | 0 |
-| **total** | | **575** | **0** |
+| **total** | | **577** | **0** |
 
 ## Dependency direction matrix (strict, pinned)
 
@@ -329,6 +329,7 @@ No function body (≥ 10 normalized lines) is shared verbatim across domains. Ne
 - `ouroboros/commit_admission.py`
 - `ouroboros/deep_self_review.py`
 - `ouroboros/dialogue_evidence.py`
+- `ouroboros/preflight_baseline.py`
 - `ouroboros/preflight_node.py`
 - `ouroboros/preflight_runner.py`
 - `ouroboros/review.py`
@@ -691,6 +692,7 @@ No function body (≥ 10 normalized lines) is shared verbatim across domains. Ne
 
 ### D15 — Memory, knowledge, consciousness & self-evolution
 
+- `ouroboros/backlog_classifier.py`
 - `ouroboros/consciousness.py`
 - `ouroboros/consciousness_allowance.py`
 - `ouroboros/consciousness_authority.py`
