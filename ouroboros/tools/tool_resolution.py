@@ -295,10 +295,9 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "file": "path",
         "file_path": "path",
         "filename": "path",
-        "name": "skill_name",
+        "name": "path",
     },
     "list_files": {
-        "dir": "path",
         "directory": "path",
         "folder": "path",
         "name": "path",
@@ -308,6 +307,8 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
     "write_file": {
         "file": "path",
         "file_path": "path",
+        "filename": "path",
+        "name": "path",
         "file_content": "content",
         "text": "content",
     },
@@ -315,6 +316,7 @@ _TOOL_ARG_ALIASES: dict[str, dict[str, str]] = {
         "file": "path",
         "file_path": "path",
         "filename": "path",
+        "name": "path",
         "search": "old_str",
         "old_string": "old_str",
         "old_text": "old_str",
@@ -462,13 +464,17 @@ _DSML_MARKER_RE = re.compile(
 )
 
 
+_PATH_LIKE_KEYS = frozenset({
+    "path", "dir", "root", "file", "filename", "file_path", "bucket", "skill_name", "cwd",
+})
+
+
 def _sanitize_dsml_val(val: Any, key: str = "") -> Any:
-    is_path_like = key in {"path", "dir", "root", "file", "filename", "file_path", "bucket", "skill_name", "cwd"}
     if isinstance(val, str):
-        cleaned = _DSML_MARKER_RE.sub("", val)
-        if is_path_like:
-            cleaned = cleaned.strip(" \t\n\r|｜\"'")
-        return cleaned
+        if key in _PATH_LIKE_KEYS:
+            cleaned = _DSML_MARKER_RE.sub("", val)
+            return cleaned.strip(" \t\n\r|｜\"'")
+        return val
     if isinstance(val, dict):
         return {k: _sanitize_dsml_val(v, k) for k, v in val.items()}
     if isinstance(val, list):
@@ -505,8 +511,7 @@ def _normalize_tool_call_args(entry: "ToolEntry", args: dict[str, Any]) -> None:
             pval = args[pkey]
             head, sep, tail = pval.partition(":")
             if sep and head in _ALL_ROOTS:
-                if "root" not in args or not args.get("root"):
-                    args["root"] = head
+                args["root"] = head
                 args[pkey] = tail
 
     # 3. Apply aliases
@@ -539,8 +544,27 @@ def _normalize_tool_call_args(entry: "ToolEntry", args: dict[str, Any]) -> None:
                     spec_val["affected_paths"] = spec_val.pop("files")
                 elif "paths" in spec_val:
                     spec_val["affected_paths"] = spec_val.pop("paths")
-                else:
+                elif "affected_resources" not in spec_val and ("plan" in args or "goal" in args):
                     spec_val["affected_paths"] = []
+            if "change" in spec_val:
+                ch = spec_val.pop("change")
+                if isinstance(ch, list):
+                    spec_val.setdefault("in_scope", []).extend([str(x) for x in ch if str(x).strip()])
+                elif isinstance(ch, str) and ch.strip():
+                    spec_val.setdefault("in_scope", []).append(ch.strip())
+            if "safety_critical" in spec_val:
+                sc = spec_val.pop("safety_critical")
+                if isinstance(sc, list):
+                    spec_val.setdefault("invariants", []).extend([str(x) for x in sc if str(x).strip()])
+                elif isinstance(sc, str) and sc.strip():
+                    spec_val.setdefault("invariants", []).append(sc.strip())
+            if "verification" in spec_val:
+                vr = spec_val.pop("verification")
+                if isinstance(vr, list):
+                    for x in vr:
+                        spec_val.setdefault("acceptance_claims", []).append({"claim": str(x)})
+                elif isinstance(vr, str) and vr.strip():
+                    spec_val.setdefault("acceptance_claims", []).append({"claim": vr.strip()})
         elif "spec" not in args and "plan" in args:
             args["spec"] = {"affected_paths": []}
 
@@ -600,7 +624,7 @@ def _prepare_public_builtin_args(entry: "ToolEntry", args: dict[str, Any], ctx: 
                 params = _entry_public_params(entry)
                 accepted = ", ".join(params) if params else "none"
                 return (
-                    f"⚠️ REPEATED_ARGUMENT_ERROR ({entry.name}): identical malformed arguments were already rejected. "
+                    f"⚠️ TOOL_ARG_ERROR ({entry.name}): REPEATED_ARGUMENT_ERROR: identical malformed arguments were already rejected. "
                     f"Do not repeat the same call without fixing arguments. Accepted parameters: {accepted}."
                 )
             recent.append(error_key)

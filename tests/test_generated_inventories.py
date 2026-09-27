@@ -300,3 +300,17 @@ def test_missing_member_refuses_generator_before_partial_inventory(tmp_path, mon
     for builder in (inv.build_frozen_inventory, inv.build_layout_inventory):
         with pytest.raises(FileNotFoundError, match="missing.md"):
             builder()
+
+
+def test_regenerate_inventories_bare_python_bootstrap_reexec():
+    """ibl-b65f7dd16472: bare python lacking tree_sitter or yaml re-execs under .venv/bin/python."""
+    import subprocess
+    # Run scripts/regenerate_inventories.py using system python3 (/usr/bin/python3)
+    res = subprocess.run(
+        ["/usr/bin/python3", str(REPO_ROOT / "scripts" / "regenerate_inventories.py"), "--check"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Bare python execution failed: {res.stderr}\n{res.stdout}"
+

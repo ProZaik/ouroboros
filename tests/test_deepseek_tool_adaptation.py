@@ -313,11 +313,11 @@ def test_additional_tool_arg_aliases(tmp_path):
     assert args1.get("path") == "subfolder"
     assert "name" not in args1
 
-    args2 = {"dir": "subfolder2"}
+    args2 = {"directory": "subfolder2"}
     err2 = _prepare_public_builtin_args(entry, args2)
     assert err2 == ""
     assert args2.get("path") == "subfolder2"
-    assert "dir" not in args2
+    assert "directory" not in args2
 
     # search_code with dir
     entry_search = registry._entries.get("search_code")
@@ -357,6 +357,7 @@ def test_verify_and_record_dict_wrapped_check(tmp_path):
 
 def test_repeated_argument_error_detection(tmp_path):
     """ibl-1be732176468: detect byte-identical tool-arg error repetition."""
+    from ouroboros.tools.tool_result import LegacyTextResultAdapter
     registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
     entry = registry._entries.get("read_file")
     assert entry is not None
@@ -372,6 +373,118 @@ def test_repeated_argument_error_detection(tmp_path):
     err2 = _prepare_public_builtin_args(entry, args2, ctx=registry._ctx)
     assert "REPEATED_ARGUMENT_ERROR" in err2
     assert "identical malformed arguments were already rejected" in err2
+
+    # Verify classification of REPEATED_ARGUMENT_ERROR
+    classified = LegacyTextResultAdapter.from_text(entry.name, err2)
+    assert classified.code == "TOOL_ARG_ERROR"
+    assert classified.status == "error"
+
+    # Multi-tool interleaved calls sliding window
+    args_other = {"other_bad_arg": "bar"}
+    err3 = _prepare_public_builtin_args(entry, args_other, ctx=registry._ctx)
+    assert "REPEATED_ARGUMENT_ERROR" not in err3
+
+    # Repeating args1 now triggers repeat guard
+    args4 = {"nonexistent_arg": "foo"}
+    err4 = _prepare_public_builtin_args(entry, args4, ctx=registry._ctx)
+    assert "REPEATED_ARGUMENT_ERROR" in err4
+
+
+def test_dsml_payload_content_preserved_without_corruption(tmp_path):
+    """Critical fix: payload fields (content, query, script) must not be corrupted by DSML stripping."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry_write = registry._entries.get("write_file")
+    assert entry_write is not None
+
+    raw_content = "def test_dsml():\n    return '<｜DSML｜test>'\n"
+    args = {
+        "path": "test_dsml.py｜DSML｜",
+        "content": raw_content,
+    }
+    err = _prepare_public_builtin_args(entry_write, args)
+    assert err == ""
+    assert args["path"] == "test_dsml.py"
+    assert args["content"] == raw_content, "Payload content must not be corrupted by DSML stripping"
+
+
+def test_read_and_write_file_name_aliases(tmp_path):
+    """ibl-1be732176468 / ibl-2556760eae99: name is alias for path, not skill_name."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+
+    entry_read = registry._entries.get("read_file")
+    assert entry_read is not None
+    args_read = {"name": "sample.py"}
+    err_read = _prepare_public_builtin_args(entry_read, args_read)
+    assert err_read == ""
+    assert args_read.get("path") == "sample.py"
+    assert "name" not in args_read
+    assert "skill_name" not in args_read
+
+    entry_write = registry._entries.get("write_file")
+    assert entry_write is not None
+    args_write = {"name": "new.py", "content": "print(1)"}
+    err_write = _prepare_public_builtin_args(entry_write, args_write)
+    assert err_write == ""
+    assert args_write.get("path") == "new.py"
+    assert "name" not in args_write
+
+
+def test_root_path_colon_separation_overrides_existing_root(tmp_path):
+    """ibl-1a54916dc5fe: path:prefix must override existing or default root."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry = registry._entries.get("read_file")
+    assert entry is not None
+
+    args = {
+        "root": "active_workspace",
+        "path": "runtime_data:memory/knowledge/improvement-backlog.md",
+    }
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == ""
+    assert args["root"] == "runtime_data"
+    assert args["path"] == "memory/knowledge/improvement-backlog.md"
+
+
+def test_plan_task_spec_normalization_and_legacy_form_preservation(tmp_path):
+    """ibl-f21bd9e64822: normalize model-invented fields, preserve PLAN_RESOURCE_FORM_REQUIRED on legacy form."""
+    registry = ToolRegistry(repo_dir=tmp_path, drive_root=tmp_path)
+    entry = registry._entries.get("plan_task")
+    assert entry is not None
+
+    # Case 1: Model passes invented fields 'change', 'safety_critical', 'verification'
+    args = {
+        "goal": "Refactor tool dispatcher",
+        "plan": "Step 1, step 2",
+        "spec": {
+            "affected_files": ["ouroboros/tools/tool_resolution.py"],
+            "change": "Add argument aliases",
+            "safety_critical": "Do not break existing callers",
+            "verification": "Run pytest tests/test_deepseek_tool_adaptation.py",
+        },
+    }
+    err = _prepare_public_builtin_args(entry, args)
+    assert err == ""
+    spec = args["spec"]
+    assert spec["affected_paths"] == ["ouroboros/tools/tool_resolution.py"]
+    assert "affected_files" not in spec
+    assert "Add argument aliases" in spec["in_scope"]
+    assert "Do not break existing callers" in spec["invariants"]
+    assert {"claim": "Run pytest tests/test_deepseek_tool_adaptation.py"} in spec["acceptance_claims"]
+    assert "change" not in spec
+    assert "safety_critical" not in spec
+    assert "verification" not in spec
+
+    # Case 2: Legacy form with affected_resources but NO affected_paths must NOT be silently auto-filled
+    legacy_args = {
+        "goal": "Migrate data",
+        "plan": "Run script",
+        "spec": {
+            "affected_resources": ["the database organ"],
+        },
+    }
+    err_legacy = _prepare_public_builtin_args(entry, legacy_args)
+    assert err_legacy == ""
+    assert "affected_paths" not in legacy_args["spec"], "Must not inject affected_paths: [] when affected_resources is present"
 
 
 

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import pathlib
 import re
 import subprocess
@@ -45,6 +46,17 @@ import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
+
+# ibl-b65f7dd16472: re-exec under .venv/bin/python if bare python lacks tree_sitter or yaml
+_venv_python = REPO_ROOT / ".venv" / "bin" / "python"
+if _venv_python.exists() and pathlib.Path(sys.executable).resolve() != _venv_python.resolve():
+    if not os.environ.get("_OUROBOROS_VENV_BOOTSTRAPPED"):
+        try:
+            import tree_sitter  # noqa: F401
+            import yaml  # noqa: F401
+        except ImportError:
+            os.environ["_OUROBOROS_VENV_BOOTSTRAPPED"] = "1"
+            os.execv(str(_venv_python), [str(_venv_python), *sys.argv])
 
 from scripts.domain_graph import (  # noqa: E402
     load_manifest,

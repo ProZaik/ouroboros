@@ -31,6 +31,17 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+# ibl-b65f7dd16472: re-exec under .venv/bin/python if bare python lacks pytest or tree_sitter
+_venv_python = REPO / ".venv" / "bin" / "python"
+if _venv_python.exists() and pathlib.Path(sys.executable).resolve() != _venv_python.resolve():
+    if not os.environ.get("_OUROBOROS_VENV_BOOTSTRAPPED"):
+        try:
+            import pytest  # noqa: F401
+            import tree_sitter  # noqa: F401
+        except ImportError:
+            os.environ["_OUROBOROS_VENV_BOOTSTRAPPED"] = "1"
+            os.execv(str(_venv_python), [str(_venv_python), *sys.argv])
+
 _MAX_SERIAL_SHARDS = 4
 _PYTEST_EXIT_NO_TESTS = 5
 
