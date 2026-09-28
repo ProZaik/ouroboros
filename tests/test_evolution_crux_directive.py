@@ -81,3 +81,15 @@ def test_crux_directive_states_pinning_policy_for_byte_exact_windows():
     content = messages[0]["content"]
     assert "compact_context(inspect=true)" in content
     assert "pin" in content.lower()
+def test_crux_directive_mandates_a_read_of_the_hit_artifact():
+    """The directive must require a read of the artifact a crux hit names
+    (ibl-851866b64863, cycle #98): a hit that is not read has not resolved
+    the crux. A no-hit search is unaffected."""
+    messages = []
+    _maybe_inject_evolution_crux_directive(
+        1, messages, {}, task_type="evolution",
+    )
+    content = messages[0]["content"]
+    assert "NEXT tool call must be a" in content
+    assert "read of the artifact it named" in content
+    assert "returns no hit is unaffected" in content
