@@ -748,7 +748,7 @@ def _add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
 
 def _add_telemetry_parser(subparsers: argparse._SubParsersAction) -> None:
     telemetry = subparsers.add_parser("telemetry", help="cumulative telemetry, numerical metrics & CLI dashboard for Ouroboros and Drovosek")
-    telemetry.add_argument("--scope", "-s", choices=["all", "core", "tokens", "tools", "drovosek", "backlog"], default="all")
+    telemetry.add_argument("--scope", "-s", choices=["all", "core", "tokens", "tools", "drovosek", "backlog", "logs"], default="all")
     telemetry.add_argument("--json", "-j", action="store_true", help="output JSON")
     telemetry.add_argument("--refresh", "-r", action="store_true", help="force refresh cache")
     telemetry.add_argument("--since", type=str, default=None, help="filter since date")
@@ -757,8 +757,10 @@ def _add_telemetry_parser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _telemetry_command(args: argparse.Namespace) -> int:
+    import shutil
     import subprocess
-    cmd = ["/root/projects/stand-appsec-pipeline/bin/ouro-metrics"]
+    bin_path = shutil.which("ouro-metrics") or "/root/projects/stand-appsec-pipeline/bin/ouro-metrics"
+    cmd = [bin_path]
     if getattr(args, "scope", None):
         cmd.extend(["--scope", args.scope])
     if getattr(args, "json", False):

@@ -134,3 +134,44 @@ def test_chat_history_without_limit_sends_no_quota(monkeypatch, capsys):
     assert args.func(args) == 0
     assert seen["request"] == ("GET", "/api/chat/history")
     capsys.readouterr()
+
+
+def test_telemetry_subcommand_parser_and_delegation(monkeypatch):
+    """Verify that `ouroboros telemetry` is parsed and properly delegates to ouro-metrics."""
+    from ouroboros import cli
+
+    executed_cmd = {}
+
+    def fake_run(cmd):
+        executed_cmd["cmd"] = cmd
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("shutil.which", lambda _name: "/custom/bin/ouro-metrics")
+
+    parser = cli.build_parser()
+    args = parser.parse_args([
+        "telemetry",
+        "--scope", "tokens",
+        "--json",
+        "--refresh",
+        "--since", "2026-09-28",
+        "--last", "20",
+    ])
+
+    assert args.scope == "tokens"
+    assert args.json is True
+    assert args.refresh is True
+    assert args.since == "2026-09-28"
+    assert args.last == 20
+
+    exit_code = args.func(args)
+    assert exit_code == 0
+    assert executed_cmd["cmd"] == [
+        "/custom/bin/ouro-metrics",
+        "--scope", "tokens",
+        "--json",
+        "--refresh",
+        "--since", "2026-09-28",
+        "--last", "20",
+    ]
