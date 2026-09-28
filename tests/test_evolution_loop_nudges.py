@@ -21,6 +21,19 @@ def test_rounds_since_last_mutative_call_with_round_id():
     # Current round is 9, last mutation at 4 -> 5 rounds since mutation
     assert rounds_since_last_mutative_call(llm_trace, 9) == 5
 
+def test_rounds_since_last_mutative_call_at_current_round_is_zero():
+    """ibl-9983411a9a44: pin the self-suppression boundary — a mutation in the
+    CURRENT round must yield 0, the value that suppresses
+    _maybe_inject_evolution_deadline. The 4/9 fixture above leaves this open."""
+    llm_trace = {
+        "tool_calls": [
+            {"tool": "read_file", "round_id": "exec_abc:round:1"},
+            {"tool": "edit_text", "round_id": "exec_abc:round:9"},
+        ]
+    }
+    # Current round is 9, mutation also at 9 -> 0 rounds since mutation
+    assert rounds_since_last_mutative_call(llm_trace, 9) == 0
+
 def test_rounds_since_last_mutative_call_ignores_errors():
     llm_trace = {
         "tool_calls": [
