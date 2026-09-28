@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import List
 
 from ouroboros import knowledge as knowledge_store
@@ -41,7 +42,7 @@ def _address(ctx: ToolContext, topic: str, scope: str = "") -> knowledge_store.K
     project = str(getattr(ctx, "project_id", "") or "")
     is_project_scoped = bool(project or scope.startswith("project:"))
     if sanitized in GLOBAL_ONLY_TOPICS:
-        if sanitized == BACKLOG_TOPIC and is_project_scoped and scope != "global":
+        if sanitized == BACKLOG_TOPIC and scope.startswith("project:"):
             pass
         else:
             return knowledge_store.resolve_knowledge_address(_backlog_root(ctx), sanitized, "global")
@@ -140,15 +141,32 @@ def _knowledge_write(
 ) -> str:
     try:
         sanitized = _sanitize_topic(topic)
-        if mode not in ("overwrite", "append") or not isinstance(content, str):
-            raise ValueError("content must be Markdown; mode must be overwrite or append")
+        allowed_modes = ("overwrite", "append", "close") if sanitized == BACKLOG_TOPIC else ("overwrite", "append")
+        if mode not in allowed_modes or not isinstance(content, str):
+            raise ValueError(f"content must be Markdown; mode must be one of: {', '.join(allowed_modes)}")
         if sanitized == BACKLOG_TOPIC:
-            from ouroboros.improvement_backlog import backlog_path, merge_backlog_text
+            from ouroboros.improvement_backlog import backlog_path, close_backlog_items, merge_backlog_text
             root = _backlog_root(ctx)
-            merged = merge_backlog_text(root, content)
+            project_id = ""
+            if scope.startswith("project:"):
+                project_id = scope.split("project:", 1)[1].strip()
+
+            target_path = backlog_path(root, project_id=project_id)
+            if mode == "close":
+                target_ids = re.findall(r"ibl-[a-zA-Z0-9_-]+", content)
+                if not target_ids:
+                    raise ValueError("mode='close' for improvement-backlog requires one or more ibl-<id> references in content")
+                closed = close_backlog_items(root, ids=target_ids, project_id=project_id)
+                _record_backlog_history(target_path, sanitized, mode, str(getattr(ctx, "task_id", "") or ""))
+                target_label = f"project '{project_id}'" if project_id else "global"
+                return f"✅ Knowledge '{sanitized}' ({target_label}): closed {closed} item(s) [{', '.join(target_ids)}]."
+
+            merged = merge_backlog_text(root, content, project_id=project_id)
             if merged < 0:
-                raise ValueError("The improvement-backlog requires parseable ### ibl-<id> blocks with - summary: lines; the global backlog was preserved")
-            _record_backlog_history(backlog_path(root), sanitized, mode, str(getattr(ctx, "task_id", "") or ""))
+                raise ValueError("The improvement-backlog requires parseable ### ibl-<id> blocks with - summary: lines; the backlog was preserved")
+            _record_backlog_history(target_path, sanitized, mode, str(getattr(ctx, "task_id", "") or ""))
+            if project_id:
+                return f"✅ Knowledge '{sanitized}' (project '{project_id}'): merged {merged} item(s)."
             return f"✅ Knowledge '{sanitized}' merged into the global backlog ({merged} item(s))."
         result = knowledge_store.write_knowledge_note(
             _address(ctx, sanitized, scope), content, mode, expected_revision,
@@ -213,7 +231,7 @@ def get_tools() -> List[ToolEntry]:
             "parameters": {"type": "object", "properties": {
                 "topic": topic, "scope": scope,
                 "content": {"type": "string", "description": "Markdown, optionally with YAML frontmatter. Write understanding and its sources/uncertainty in your own words; no summary is generated from the body."},
-                "mode": {"type": "string", "enum": ["overwrite", "append"], "description": "overwrite (default) replaces the body; append adds to the current source. Missing notes are created."},
+                "mode": {"type": "string", "enum": ["overwrite", "append", "close"], "description": "overwrite (default) replaces the body; append adds to the current source. For topic='improvement-backlog', mode='close' closes individual items matching ibl-<id> references in content. Missing notes are created."},
                 "expected_revision": {"type": "string", "description": "Source revision returned by knowledge_read. Omit or pass an empty string to create a missing note; an empty string never replaces an existing note. Required when overwriting an existing note; drift returns the newer source without replacing it."},
             }, "required": ["topic", "content"]},
         }, _knowledge_write),

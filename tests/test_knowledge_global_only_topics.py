@@ -54,6 +54,12 @@ def test_pattern_register_topic_reaches_the_drive_the_writer_and_readers_use(tmp
 @pytest.mark.parametrize("topic", sorted(tools.GLOBAL_ONLY_TOPICS))
 @pytest.mark.parametrize("scope", ["", "global", "project:demo"])
 def test_reserved_topics_resolve_globally_from_a_project_room(tmp_path, topic, scope):
+    if topic == tools.BACKLOG_TOPIC and scope.startswith("project:"):
+        # Symbiotic backlog segregation allows explicit per-project scoping
+        address = tools._address(project_ctx(tmp_path), topic, scope)
+        assert address.scope == "project:demo"
+        assert address.project_id == "demo"
+        return
     address = tools._address(project_ctx(tmp_path), topic, scope)
 
     assert address.scope == "global"

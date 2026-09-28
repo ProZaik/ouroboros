@@ -379,39 +379,41 @@ def append_backlog_items(drive_root: Any, items: List[Dict[str, Any]], project_i
     return changed
 
 
-def merge_backlog_text(drive_root: Any, text: str) -> int:
-    """Non-destructively merge backlog items parsed from ``text`` into the ONE
-    global backlog (C10.1 Fix A). Routes through ``append_backlog_items`` so the
+def merge_backlog_text(drive_root: Any, text: str, project_id: str = "") -> int:
+    """Non-destructively merge backlog items parsed from ``text`` into the
+    backlog (global or per-project). Routes through ``append_backlog_items`` so the
     write is a UNION (existing items preserved, new items added, reworded restatements
-    folded by the dedup pre-pass) — never a truncating overwrite that could wipe the
-    immune backlog. Returns the number of items merged, or ``-1`` (fail-closed) when
-    ``text`` carries no parseable item — an unparseable overwrite must leave the
-    backlog intact, even if the model believes it wrote something. Never raises."""
+    folded by the dedup pre-pass). Items carrying status: done close matching items
+    via close_backlog_items. Returns the number of items changed, or ``-1`` on unparseable."""
     try:
         items = [
             it for it in _parse_backlog_items(text or "")
             if str(it.get("summary") or "").strip()
+            or (it.get("id") and str(it.get("status") or "").lower() == "done")
         ]
     except Exception:
         return -1
     if not items:
         return -1
-    # Only items NOT already present (by exact fingerprint) are merged: a verbatim
-    # re-write of the backlog — the natural read-edit-write pattern — must not bump
-    # every existing item's recurrence count by +1 (the count drives ranking and the
-    # recurrence heuristics). Existing items stay untouched (non-destructive); only
-    # genuinely new items flow through the SSOT append (its own semantic pre-pass +
-    # exact merge still applies to those).
+    done_ids = [
+        str(it["id"]).strip() for it in items
+        if str(it.get("status") or "").lower() == "done" and it.get("id")
+    ]
+    closed_count = 0
+    if done_ids:
+        closed_count = close_backlog_items(drive_root, ids=done_ids, project_id=project_id)
     try:
         existing_fps = {
             str(it.get("fingerprint") or "")
-            for it in load_backlog_items(drive_root)
+            for it in load_backlog_items(drive_root, project_id=project_id)
             if it.get("fingerprint")
         }
     except Exception:
         existing_fps = set()
     fresh: List[Dict[str, Any]] = []
     for it in items:
+        if str(it.get("status") or "").lower() == "done":
+            continue
         raw_summary = str(it.get("summary") or "")
         raw_category = str(it.get("category") or "process")
         raw_source = str(it.get("source") or "task")
@@ -423,8 +425,8 @@ def merge_backlog_text(drive_root: Any, text: str) -> int:
             continue
         fresh.append(it)
     if not fresh:
-        return 0  # everything already present — backlog intact, no inflation
-    return append_backlog_items(drive_root, fresh)
+        return closed_count  # closed items count as changes; 0 if nothing fresh and nothing closed
+    return append_backlog_items(drive_root, fresh, project_id=project_id) + closed_count
 
 
 def close_backlog_items(drive_root: Any, *, task_id: Any = None, ids: Any = None, project_id: str = "") -> int:

@@ -514,6 +514,14 @@ def _normalize_tool_call_args(entry: "ToolEntry", args: dict[str, Any]) -> None:
                 args["root"] = head
                 args[pkey] = tail
 
+    # 2.5 Skill payload parameter aliasing:
+    # When root is skill_payload, 'name' or 'skill' refers to skill_name, not path
+    if str(args.get("root") or "").strip() == "skill_payload" and "skill_name" in accepted and "skill_name" not in args:
+        for sk_key in ("skill_name", "skill", "name"):
+            if sk_key in args and str(args[sk_key] or "").strip():
+                args["skill_name"] = args.pop(sk_key)
+                break
+
     # 3. Apply aliases
     aliases: dict[str, str] = {}
     aliases.update(_TOOL_ARG_ALIASES.get("*", {}))
