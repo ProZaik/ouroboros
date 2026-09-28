@@ -60,7 +60,19 @@ def _evolution_commit_authority(
             authority = {**authority, "ok": False, "reason": f"git_state_unavailable:{exc}"}
         else:
             if head != expected_sha:
-                authority = {**authority, "ok": False, "reason": "head_mismatch"}
+                is_ancestor = False
+                try:
+                    probe = subprocess.run(
+                        ["git", "merge-base", "--is-ancestor", expected_sha, head],
+                        cwd=ctx.repo_dir,
+                        capture_output=True,
+                        check=False,
+                    )
+                    is_ancestor = (probe.returncode == 0)
+                except Exception:
+                    pass
+                if not is_ancestor:
+                    authority = {**authority, "ok": False, "reason": "head_mismatch"}
     return claim, authority
 
 

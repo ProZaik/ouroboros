@@ -656,7 +656,7 @@ def resolve_attributed_git_paths(
     """Resolve omitted/explicit staging paths against one attributed candidate set."""
     evidence = attributed_git_candidates(results_drive_root, task_id, repo_root)
     blockers = [str(item) for item in evidence.get("blockers") or [] if str(item)]
-    if blockers == ["baseline_stale"] and try_reanchor_stale_baseline(
+    if "baseline_stale" in blockers and try_reanchor_stale_baseline(
         results_drive_root, task_id, repo_root,
     ):
         evidence = attributed_git_candidates(results_drive_root, task_id, repo_root)
