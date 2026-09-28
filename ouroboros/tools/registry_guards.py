@@ -623,6 +623,13 @@ def _resolved_shell_cwd(
     resolution fails. Every guard downstream takes this canonical path instead
     of re-resolving — or, worse, string-joining the raw cwd label onto a root,
     which is the D1 regression class (v6.74.0)."""
+    # Sanitize leaked marker bytes (U+FF5C family) in path-like args before the
+    # raw cwd reaches resolution. The generic sanitizer in tool_resolution runs
+    # too late — the guard rejects the raw string first (SHELL_CWD_BLOCKED).
+    # Function-local import keeps this module free of a top-level import cycle.
+    from ouroboros.tools.tool_resolution import _sanitize_tool_args_dsml
+
+    _sanitize_tool_args_dsml(args)
     items = _registry()._binding_items(binding)
     if items:
         return pathlib.Path(items[0].target_path)
