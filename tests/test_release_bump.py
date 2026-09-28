@@ -74,3 +74,22 @@ def test_release_bump_cli_invocation(tmp_path):
     assert proc.returncode == 0, f"CLI bump failed: {proc.stderr}\n{proc.stdout}"
     assert (repo / "VERSION").read_text(encoding="utf-8").strip() == "4.99.2"
     assert check_worktree_version_sync(str(repo)) == ""
+def test_stale_readme_version_history_row_is_reported(tmp_path):
+    """A stale README Version History row fails loudly, naming the carrier.
+
+    check_worktree_version_sync reads the live carrier files itself; this pin
+    covers the one carrier the objective names that the existing uv.lock
+    real-tree pin does not: the README Version History row.
+    """
+    repo = _make_repo(tmp_path, version="4.99.1")
+
+    readme_path = repo / "README.md"
+    readme_text = readme_path.read_text(encoding="utf-8")
+    stale_row = "| 4.99.1 | 2026-01-01 | New release |\n"
+    assert stale_row in readme_text, "fixture must seed the Version History row"
+    readme_path.write_text(readme_text.replace(stale_row, ""), encoding="utf-8")
+
+    warning = check_worktree_version_sync(str(repo))
+
+    assert warning != "", "a stale README Version History row must fail loudly, not silently pass"
+    assert "README.md Version History" in warning
