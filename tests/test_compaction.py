@@ -391,3 +391,44 @@ def test_select_units_respects_keep_unit_ids():
     selected_ids = [u.unit.unit_id for u in selection.units]
     assert pinned_id not in selected_ids
 
+
+
+def test_pinned_unit_raw_bytes_survive_materialization():
+    """End-to-end: a unit pinned via keep_unit_ids is excluded from the
+    summarization selection, so _materialize_replacements leaves its original
+    turns byte-identical (an edit_text anchor still matches the ORIGINAL bytes).
+
+    Covers the residual left open by
+    test_select_units_respects_keep_unit_ids (propagation only) and
+    test_compact_context_pin_unit_ids_and_invalidation (helper only)."""
+    messages = [
+        *_large_unit("c1"),
+        *_large_unit("c2"),
+        *_large_unit("c3"),
+    ]
+    units = cc._atomic_units(messages)
+    assert len(units) == 3
+    pinned = units[0]
+    original_turns = list(messages[pinned.start:pinned.end + 1])
+
+    req = ContextReclaimRequest(
+        route_fp="r", round_id="1",
+        transcript_sha256=cc.context_reclaim_transcript_sha256(messages),
+        measurement_basis="cold_estimate",
+        measurement_density=1.0,
+        reclaim_goal_tokens=100_000,
+        keep_unit_ids=(pinned.unit_id,),
+    )
+    selection, status = cc._select_units(
+        messages, req, keep_recent=0, trace_refs_by_tool_call_id={}, negative_memo=set(),
+        spec={"model": "m", "effort": "low", "resolved_model": "m", "provider": "p", "route_fp": "r", "output_budget": 1000, "use_local": False},
+    )
+    assert status == "applied"
+    assert selection is not None
+    selected_ids = [u.unit.unit_id for u in selection.units]
+    assert pinned.unit_id not in selected_ids
+
+    replacements = {item.unit.start: (item.unit.end, [], []) for item in selection.units}
+    rebuilt, _capsule_refs = cc._materialize_replacements(messages, replacements)
+    for turn in original_turns:
+        assert turn in rebuilt
