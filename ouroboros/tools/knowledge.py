@@ -202,7 +202,7 @@ def get_tools() -> List[ToolEntry]:
     return [
         ToolEntry("knowledge_read", {
             "name": "knowledge_read",
-            "description": "Read a complete knowledge note with its canonical address and exact source revision. Follow Markdown links relative to the note's source. Read current understanding before revising it.",
+            "description": "Read a complete knowledge note with its canonical address and exact source revision. Serves both global knowledge and a project room's per-project store: per-project knowledge is reachable only through the knowledge tools (scope='project:<exact project id>'), and generic data tools (read_file/search_code against runtime_data) are denied for it. Follow Markdown links relative to the note's source. Read current understanding before revising it.",
             "parameters": {"type": "object", "properties": {"topic": topic, "scope": scope,
                 "start_char": {"type": "integer", "description": "Optional half-open character range start in the exact complete note (omitted = 0). Use ranges to read a large source in parts."},
                 "end_char": {"type": "integer", "description": "Exclusive range end (omitted = the end; a value past the end is lowered to it); complete_chars and revision are returned with every view. Omit both bounds, or pass 0 and 0, for the full note."}}, "required": ["topic"]},
