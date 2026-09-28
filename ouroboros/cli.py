@@ -656,6 +656,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_marketplace_parser(subparsers)
     _add_local_model_parser(subparsers)
     _add_mcp_parser(subparsers)
+    _add_telemetry_parser(subparsers)
     return parser
 
 
@@ -743,6 +744,33 @@ def _add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
     test = sub.add_parser("test")
     test.add_argument("--server-id", default="")
     test.set_defaults(func=_mcp_command)
+
+
+def _add_telemetry_parser(subparsers: argparse._SubParsersAction) -> None:
+    telemetry = subparsers.add_parser("telemetry", help="cumulative telemetry, numerical metrics & CLI dashboard for Ouroboros and Drovosek")
+    telemetry.add_argument("--scope", "-s", choices=["all", "core", "tokens", "tools", "drovosek", "backlog"], default="all")
+    telemetry.add_argument("--json", "-j", action="store_true", help="output JSON")
+    telemetry.add_argument("--refresh", "-r", action="store_true", help="force refresh cache")
+    telemetry.add_argument("--since", type=str, default=None, help="filter since date")
+    telemetry.add_argument("--last", "-n", type=int, default=None, help="filter last N tasks")
+    telemetry.set_defaults(func=_telemetry_command)
+
+
+def _telemetry_command(args: argparse.Namespace) -> int:
+    import subprocess
+    cmd = ["/root/projects/stand-appsec-pipeline/bin/ouro-metrics"]
+    if getattr(args, "scope", None):
+        cmd.extend(["--scope", args.scope])
+    if getattr(args, "json", False):
+        cmd.append("--json")
+    if getattr(args, "refresh", False):
+        cmd.append("--refresh")
+    if getattr(args, "since", None):
+        cmd.extend(["--since", args.since])
+    if getattr(args, "last", None):
+        cmd.extend(["--last", str(args.last)])
+    res = subprocess.run(cmd)
+    return res.returncode
 
 
 def _client(args: argparse.Namespace, *, start: bool = False) -> OuroborosHTTPClient:
