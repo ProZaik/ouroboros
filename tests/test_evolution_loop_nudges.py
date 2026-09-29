@@ -388,4 +388,47 @@ def test_evolution_decision_tool_refuses_without_accumulated_usage():
     assert result.startswith("REFUSED")
 
 
+def test_evolution_recon_cap_fires_at_constant_with_missing_mutation_diagnostic():
+    """ibl-162f2e536548: the decide-or-abstain cap fires at the named constant, and the
+    diagnostic names the round count and the missing mutation class."""
+    from ouroboros.loop_nudges import (
+        EVOLUTION_RECON_CAP_ROUNDS,
+        _maybe_inject_evolution_deadline,
+    )
+
+    messages: list = []
+    llm_trace = {"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]}
+    fired = _maybe_inject_evolution_deadline(
+        EVOLUTION_RECON_CAP_ROUNDS,
+        messages,
+        {},
+        llm_trace=llm_trace,
+        task_type="evolution",
+    )
+    assert fired is True
+    text = messages[-1]["content"]
+    assert "[DECIDE-OR-ABSTAIN DEADLINE" in text
+    assert f"{EVOLUTION_RECON_CAP_ROUNDS} consecutive rounds" in text
+    assert "Missing mutation" in text
+
+
+def test_evolution_recon_cap_does_not_fire_one_round_below():
+    """The cap must not fire before its declared threshold."""
+    from ouroboros.loop_nudges import (
+        EVOLUTION_RECON_CAP_ROUNDS,
+        _maybe_inject_evolution_deadline,
+    )
+
+    messages: list = []
+    llm_trace = {"tool_calls": [{"tool": "read_file", "round_id": "exec_abc:round:1"}]}
+    fired = _maybe_inject_evolution_deadline(
+        EVOLUTION_RECON_CAP_ROUNDS - 1,
+        messages,
+        {},
+        llm_trace=llm_trace,
+        task_type="evolution",
+    )
+    assert fired is False
+
+
 

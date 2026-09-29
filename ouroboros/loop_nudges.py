@@ -427,6 +427,13 @@ def rounds_since_last_mutative_call(llm_trace: Optional[Dict[str, Any]], current
     return max(0, current_round - last_mutation_round)
 
 
+# Hard recon cap for self-evolution cycles (backlog ibl-162f2e536548; owner P0 steer
+# ibl-e3eb54431a74 bounds this at <= 10). Lowered from 10 to 6 so a narrow, already-crux-resolved
+# edit task cannot starve plan_task and the edit behind read-only discovery. There is no typed
+# signal for "already-crux-resolved"; building one would require a prose classifier, which BIBLE
+# P5 forbids, so the cap applies to the whole task_type == "evolution" class.
+EVOLUTION_RECON_CAP_ROUNDS = 6
+
 EVOLUTION_EXIT_CONTRACT = (
     "1. Perform the intended code change via `edit_text` or `write_file` and commit with `commit_reviewed`, OR\n"
     "2. Conclude this cycle with an explicit, honest NO_OP / ABSTAIN explanation, OR\n"
@@ -487,11 +494,12 @@ def _maybe_inject_evolution_deadline(
     llm_trace: Optional[Dict[str, Any]] = None,
     task_type: str = "",
 ) -> bool:
-    """Inject a decide-or-abstain deadline for self-evolution tasks after 10+ non-mutating rounds."""
-    if task_type != "evolution" or round_idx < 10:
+    """Inject a decide-or-abstain deadline for self-evolution tasks after
+    EVOLUTION_RECON_CAP_ROUNDS consecutive non-mutating rounds."""
+    if task_type != "evolution" or round_idx < EVOLUTION_RECON_CAP_ROUNDS:
         return False
     consecutive_non_mutating = rounds_since_last_mutative_call(llm_trace, round_idx)
-    if consecutive_non_mutating < 10:
+    if consecutive_non_mutating < EVOLUTION_RECON_CAP_ROUNDS:
         return False
     last_injected = accumulated_usage.get("_last_evolution_deadline_round")
     if last_injected is not None and round_idx - last_injected < 3:
@@ -535,6 +543,7 @@ def _maybe_inject_evolution_deadline(
             f"This self-evolution cycle has run for {consecutive_non_mutating} consecutive rounds without any code or file mutations.\n"
             "Reconnaissance is exhausted. You MUST now choose one of the valid evolution exits:\n"
             f"{EVOLUTION_EXIT_CONTRACT}\n"
+            f"Missing mutation: no successful edit_text / write_file / apply_patch / commit_reviewed call has occurred in these {consecutive_non_mutating} rounds.\n"
             "Do not continue read-only exploration without making a decision."
         )
     _loop()._append_or_merge_user_message(messages, notice)
