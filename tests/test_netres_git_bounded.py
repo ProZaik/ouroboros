@@ -379,3 +379,33 @@ def test_commit_path_auto_push_timeout_is_best_effort_warning(tmp_path, monkeypa
     assert "[push skipped: git push failed:" in result
     assert "exceeded" in result
     assert ctx.last_push_succeeded is False
+
+
+def test_publish_reviewed_commit_flags_head_mismatch(tmp_path, monkeypatch):
+    """Fulfills ibl-ac0153c78cfa:
+    When a concurrent writer moves HEAD immediately after a commit,
+    _publish_reviewed_commit must explicitly flag HEAD_MISMATCH.
+    """
+    from types import SimpleNamespace
+    from ouroboros.tools import git as git_module
+
+    ctx = SimpleNamespace(
+        branch_dev="ouroboros",
+        current_task_type="default",
+        repo_dir=tmp_path,
+        last_push_succeeded=False,
+        _review_advisory=[],
+    )
+    monkeypatch.setattr(git_module, "run_cmd", lambda cmd, cwd=None: "foreign_head_sha_9999")
+    result = git_module._publish_reviewed_commit(
+        ctx,
+        commit_message="test message",
+        commit_sha="my_commit_sha_1111",
+        tag_info="",
+        test_warning="",
+        paths=None,
+        push_status="",
+    )
+    assert "OK: committed to ouroboros: test message" in result
+    assert "⚠️ HEAD_MISMATCH: HEAD moved to foreign_h immediately after commit my_commit" in result
+

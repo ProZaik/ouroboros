@@ -1135,8 +1135,16 @@ def _publish_reviewed_commit(
             )
         except Exception:
             log.debug("Failed to record evolution transaction push status", exc_info=True)
+    current_head = ""
+    try:
+        current_head = run_cmd(["git", "rev-parse", "HEAD"], cwd=ctx.repo_dir).strip()
+    except Exception:
+        pass
+    head_note = ""
+    if current_head and commit_sha and current_head != commit_sha:
+        head_note = f"\n\n⚠️ HEAD_MISMATCH: HEAD moved to {current_head[:9]} immediately after commit {commit_sha[:9]} (concurrent writer detected); verify repository state before proceeding."
     ci_note = _check_ci_status_after_push(ctx.repo_dir) if ctx.last_push_succeeded else ""
-    result = _format_commit_result(ctx, commit_message, push_status + tag_info, test_warning)
+    result = _format_commit_result(ctx, commit_message, push_status + tag_info, test_warning) + head_note
     if is_evolution:
         result += (
             "\n\nEvolution transaction open: this cycle should contain at most one reviewed commit. "
