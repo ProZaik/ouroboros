@@ -127,8 +127,10 @@ def test_disposition_resolves_slot_unprefixed_finding_id_and_rejects_empty(harne
     """Fulfills ibl-2bc785267582:
     - Resolves finding_id passed without slot prefix (e.g. 'n1') when unambiguous ('s1:n1').
     - Rejects empty finding_id with a clear items[i].finding_id is required error.
+    - Resolves finding_id starting with 'slot_' (e.g. 'slot_leak') without erroneous slot prefix rejection.
+    - Detects ambiguous finding_id when multiple slots report findings with the same name.
     """
-    sub = harness.install({"s1": json.dumps([_finding("n1", "note")]), "s2": CLEAN, "s3": CLEAN})
+    sub = harness.install({"s1": json.dumps([_finding("n1", "note"), _finding("slot_leak", "note")]), "s2": CLEAN, "s3": CLEAN})
     ctx = harness.make_ctx()
     _call(ctx)
     before = _state(harness)
@@ -140,12 +142,35 @@ def test_disposition_resolves_slot_unprefixed_finding_id_and_rejects_empty(harne
     ]})
     assert "ERROR: PLAN_REVIEW_DISPOSITION_INVALID: items[0].finding_id is required" in bad_empty
 
-    # Unprefixed finding_id 'n1' resolves to 's1:n1'
+    # Unprefixed finding_id 'n1' resolves to 's1:n1' and 'slot_leak' resolves to 's1:slot_leak'
     resolved = pr._handle_plan_task(ctx, review_disposition={"review_fingerprint": fp, "items": [
-        {"finding_id": "n1", "decision": "accept", "rationale": "r"},
+        {"finding_id": "n1", "decision": "accept", "rationale": "r1"},
+        {"finding_id": "slot_leak", "decision": "accept", "rationale": "r2"},
     ]})
     assert "ERROR: PLAN_REVIEW_DISPOSITION_INVALID" not in resolved
     assert _control(resolved)["closed"] is True
+
+
+def test_disposition_rejects_ambiguous_unprefixed_finding_id_across_slots(harness):
+    """When multiple slots return findings with the same id (e.g. 'dup1'),
+    passing 'dup1' without a slot prefix is rejected with a typed error naming all candidate matches.
+    """
+    sub = harness.install({
+        "s1": json.dumps([_finding("dup1", "note")]),
+        "s2": json.dumps([_finding("dup1", "note")]),
+        "s3": CLEAN,
+    })
+    ctx = harness.make_ctx()
+    _call(ctx)
+    before = _state(harness)
+    fp = before["waves"][-1]["request_fingerprint"]
+
+    ambig = pr._handle_plan_task(ctx, review_disposition={"review_fingerprint": fp, "items": [
+        {"finding_id": "dup1", "decision": "accept", "rationale": "r"},
+    ]})
+    assert "ERROR: PLAN_REVIEW_DISPOSITION_INVALID: ambiguous finding id(s) across slots" in ambig
+    assert "'dup1' matches: s1:dup1, s2:dup1" in ambig
+
 
 
 def test_constitutional_packet_without_architecture_is_a_typed_failure(harness):

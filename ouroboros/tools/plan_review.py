@@ -1193,15 +1193,24 @@ def _apply_disposition(ctx: ToolContext, disposition: dict) -> str:
             return _bad("ERROR: PLAN_REVIEW_DISPOSITION_INVALID: " + str(exc))
     known = {str(f.get("finding_id") or "") for f in wave.get("findings") or []}
     resolved_items = []
+    ambiguous_ids: dict[str, list[str]] = {}
     for item in items:
         fid = item.get("finding_id")
-        if fid not in known and not str(fid).startswith("slot_"):
-            candidates = [k for k in known if k.endswith(f":{fid}")]
-            if len(candidates) == 1:
-                item = dict(item)
-                item["finding_id"] = candidates[0]
+        if fid not in known:
+            if ":" not in str(fid):
+                candidates = [k for k in sorted(known) if k.partition(":")[2] == fid]
+                if len(candidates) == 1:
+                    item = dict(item)
+                    item["finding_id"] = candidates[0]
+                elif len(candidates) > 1:
+                    ambiguous_ids[str(fid)] = candidates
         resolved_items.append(item)
     items = resolved_items
+    if ambiguous_ids:
+        details = "; ".join(f"'{fid}' matches: {', '.join(matches)}" for fid, matches in sorted(ambiguous_ids.items()))
+        return _bad(
+            f"ERROR: PLAN_REVIEW_DISPOSITION_INVALID: ambiguous finding id(s) across slots ({details}); specify the full slot-prefixed id"
+        )
     unknown_ids = sorted({i["finding_id"] for i in items if i["finding_id"] not in known})
     if unknown_ids:
         return _bad(
