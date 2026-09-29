@@ -276,6 +276,19 @@ def test_crux_directive_mandates_reading_a_fake_consumer_type_contract():
     assert "return the TYPE the consumer actually consumes" in content
 
 
+def test_crux_directive_mandates_plan_task_when_objective_requires_plan_review():
+    """ibl-520253cb17fe: crux directive explicitly warns that plan_task must be run before implementation."""
+    from ouroboros.loop_nudges import _maybe_inject_evolution_crux_directive
+
+    messages: list = [{"role": "user", "content": "obj"}]
+    accumulated: dict = {}
+    _maybe_inject_evolution_crux_directive(1, messages, accumulated, task_type="evolution")
+    content = "\n".join(str(m.get("content") or "") for m in messages)
+    assert "requires plan review" in content
+    assert "run plan_task before edit_text/apply_patch/write_file" in content
+
+
+
 def test_crux_directive_initializes_decision_step():
     """ibl-eacad98b3b83 (A4): crux directive registers initial undecided EvolutionDecisionStep."""
     from ouroboros.loop_nudges import (
