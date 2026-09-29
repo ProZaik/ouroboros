@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import codecs
 import ast
+import errno
 from hashlib import sha256
 import pathlib
 import json
@@ -220,7 +221,11 @@ def _path_kind(path: pathlib.Path) -> str:
         mode = path.stat().st_mode
     except FileNotFoundError:
         return "missing"
-    except (OSError, ValueError, RuntimeError):
+    except OSError as exc:
+        if getattr(exc, "errno", None) == errno.ELOOP:
+            return "symlink_loop"
+        return "unreadable"
+    except (ValueError, RuntimeError):
         return "unreadable"
     if stat.S_ISDIR(mode):
         return "directory"

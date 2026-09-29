@@ -1166,8 +1166,11 @@ def _apply_disposition(ctx: ToolContext, disposition: dict) -> str:
     for index, item in enumerate(raw_items):
         if not isinstance(item, dict):
             return _bad(f"ERROR: PLAN_REVIEW_DISPOSITION_INVALID: items[{index}] must be an object")
+        fid = str(item.get("finding_id") or "").strip()[:plan_spec.MAX_ID_CHARS * 2]
+        if not fid:
+            return _bad(f"ERROR: PLAN_REVIEW_DISPOSITION_INVALID: items[{index}].finding_id is required")
         items.append({
-            "finding_id": str(item.get("finding_id") or "").strip()[:plan_spec.MAX_ID_CHARS * 2],
+            "finding_id": fid,
             "decision": str(item.get("decision") or "").strip().lower()[:40],  # enum-like, bounded
             "rationale": plan_spec.bounded_text(item.get("rationale"), plan_spec.MAX_FINDING_TEXT_CHARS),
         })
@@ -1189,6 +1192,16 @@ def _apply_disposition(ctx: ToolContext, disposition: dict) -> str:
         except ValueError as exc:
             return _bad("ERROR: PLAN_REVIEW_DISPOSITION_INVALID: " + str(exc))
     known = {str(f.get("finding_id") or "") for f in wave.get("findings") or []}
+    resolved_items = []
+    for item in items:
+        fid = item.get("finding_id")
+        if fid not in known and not str(fid).startswith("slot_"):
+            candidates = [k for k in known if k.endswith(f":{fid}")]
+            if len(candidates) == 1:
+                item = dict(item)
+                item["finding_id"] = candidates[0]
+        resolved_items.append(item)
+    items = resolved_items
     unknown_ids = sorted({i["finding_id"] for i in items if i["finding_id"] not in known})
     if unknown_ids:
         return _bad(

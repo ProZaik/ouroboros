@@ -123,6 +123,31 @@ def test_closed_note_annotation_keeps_input_validation_and_current_wave_binding(
     assert len(sub.calls) == 2
 
 
+def test_disposition_resolves_slot_unprefixed_finding_id_and_rejects_empty(harness):
+    """Fulfills ibl-2bc785267582:
+    - Resolves finding_id passed without slot prefix (e.g. 'n1') when unambiguous ('s1:n1').
+    - Rejects empty finding_id with a clear items[i].finding_id is required error.
+    """
+    sub = harness.install({"s1": json.dumps([_finding("n1", "note")]), "s2": CLEAN, "s3": CLEAN})
+    ctx = harness.make_ctx()
+    _call(ctx)
+    before = _state(harness)
+    fp = before["waves"][-1]["request_fingerprint"]
+
+    # Empty finding_id
+    bad_empty = pr._handle_plan_task(ctx, review_disposition={"review_fingerprint": fp, "items": [
+        {"finding_id": "", "decision": "accept", "rationale": "r"},
+    ]})
+    assert "ERROR: PLAN_REVIEW_DISPOSITION_INVALID: items[0].finding_id is required" in bad_empty
+
+    # Unprefixed finding_id 'n1' resolves to 's1:n1'
+    resolved = pr._handle_plan_task(ctx, review_disposition={"review_fingerprint": fp, "items": [
+        {"finding_id": "n1", "decision": "accept", "rationale": "r"},
+    ]})
+    assert "ERROR: PLAN_REVIEW_DISPOSITION_INVALID" not in resolved
+    assert _control(resolved)["closed"] is True
+
+
 def test_constitutional_packet_without_architecture_is_a_typed_failure(harness):
     """W3/D26: a self-modification packet without ARCHITECTURE.md is an assembly failure the
     agent sees, never a reviewer wave that silently lacks the document."""

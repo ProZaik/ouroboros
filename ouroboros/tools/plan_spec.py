@@ -18,6 +18,7 @@ those cuts retain their existing disclosures.
 
 from __future__ import annotations
 
+import errno
 from hashlib import sha256
 import json
 import pathlib
@@ -236,7 +237,7 @@ def normalize_spec(raw: Mapping[str, Any] | None) -> tuple[dict, list[str]]:
         return {}, ["spec: must be an object"]
     unknown = sorted(str(key) for key in raw if key not in _SPEC_KEYS)
     if unknown:
-        errors.append("spec: unknown fields: " + ", ".join(unknown))
+        errors.append("spec: unknown fields: " + ", ".join(unknown) + "; valid fields: " + ", ".join(sorted(_SPEC_KEYS)))
     goal = raw["goal"].strip() if isinstance(raw.get("goal"), str) else ""
     if not goal:
         errors.append(
@@ -465,7 +466,11 @@ def _resolve_locator_path(locator: str, root: pathlib.Path) -> tuple[Optional[pa
         return (candidate if candidate.is_absolute() else root / candidate).resolve(strict=False), ""
     except RuntimeError:
         return None, "symlink_loop"
-    except (OSError, ValueError):
+    except OSError as exc:
+        if getattr(exc, "errno", None) == errno.ELOOP:
+            return None, "symlink_loop"
+        return None, "unsupported_locator"
+    except ValueError:
         return None, "unsupported_locator"
 
 
