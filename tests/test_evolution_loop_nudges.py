@@ -253,6 +253,17 @@ def test_evolution_decision_step_no_residual_owed_enforcement():
     assert "Non-existent API removed 6 months ago" in text
 
 
+def test_crux_directive_mandates_symbol_and_wiring_after_already_exists():
+    """A crux hit resolving to an already-implemented symbol must name it."""
+    from ouroboros.loop_nudges import _maybe_inject_evolution_crux_directive
+
+    messages: list = [{"role": "user", "content": "obj"}]
+    accumulated: dict = {}
+    _maybe_inject_evolution_crux_directive(1, messages, accumulated, task_type="evolution")
+    content = "\n".join(str(m.get("content") or "") for m in messages)
+    assert "name the found symbol and its exact location" in content
+
+
 def test_crux_directive_initializes_decision_step():
     """ibl-eacad98b3b83 (A4): crux directive registers initial undecided EvolutionDecisionStep."""
     from ouroboros.loop_nudges import (
