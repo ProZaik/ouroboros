@@ -15,11 +15,42 @@ from types import SimpleNamespace
 
 from ouroboros.client_surface import (
     CLIENT_SURFACE_UA_LIMIT,
+    MACHINE_SURFACE_CHANNELS,
     client_surface_identity,
+    non_owner_surface_channel,
     normalize_client_surface,
 )
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
+
+
+# ---------------------------------------------------------------------------
+# Reader half of the phantom-root-task class (ibl-b4000f69c33c)
+# ---------------------------------------------------------------------------
+
+def test_machine_surface_channels_are_the_named_producers():
+    """The closed set is the codebase's own machine endpoints — not invented."""
+    assert MACHINE_SURFACE_CHANNELS == frozenset({"api_command", "api_task", "cli"})
+
+
+def test_absent_or_owner_surface_mints():
+    """Absence is the owner default: web typing, a bare dict, a non-dict."""
+    assert non_owner_surface_channel(None) == ""
+    assert non_owner_surface_channel({}) == ""
+    assert non_owner_surface_channel("desktop") == ""
+    assert non_owner_surface_channel({"pywebview": True, "ua": "SPA"}) == ""
+
+
+def test_known_machine_channel_refuses():
+    """An explicitly present known machine channel is named non-owner."""
+    for channel in ("api_command", "api_task", "cli"):
+        assert non_owner_surface_channel({"channel": channel}) == channel
+
+
+def test_unrecognized_channel_is_owner_default():
+    """An unknown transport channel (carries owner text) still mints."""
+    assert non_owner_surface_channel({"channel": "telegram"}) == ""
+    assert non_owner_surface_channel({"channel": 42}) == ""
 
 
 # ---------------------------------------------------------------------------
@@ -527,3 +558,101 @@ def test_frontend_sends_raw_observables_without_device_taxonomy():
                 f"device taxonomy label {label!r} crept into {src_name} — raw "
                 "observables only, the model classifies"
             )
+
+
+def test_route_owner_message_refuses_machine_channel_root_mint(monkeypatch):
+    """Consumer-driving pin (reviewer f2/f5, cycle #112 residual): drives the
+    real `_route_owner_message` with a descriptor whose typed
+    `client_surface.channel` is a known machine channel. Asserts the decision
+    lane is never reached AND a typed `root_mint_refused` receipt fires.
+
+    A pin that only asserted `non_owner_surface_channel`'s return stayed green
+    when this call site was neutered — the vacuous proof this replaces.
+    Neutering the guard must turn THIS test red.
+    """
+    import ouroboros.server_owner_routing as server
+    import ouroboros.projects_registry
+
+    direct_calls = []
+    receipts = []
+
+    class ImmediateThread:
+        def __init__(self, target, args=(), kwargs=None, daemon=False):
+            self._target, self._args, self._kwargs = target, args, kwargs or {}
+
+        def start(self):
+            self._target(*self._args, **self._kwargs)
+
+    def make_ctx():
+        return SimpleNamespace(
+            DRIVE_ROOT=None,
+            consciousness=SimpleNamespace(
+                inject_observation=lambda *_: None,
+                pause=lambda: None,
+                resume=lambda: None,
+            ),
+            get_chat_agent=lambda: SimpleNamespace(_busy=True),
+            handle_chat_direct=lambda *a, **kw: direct_calls.append(kw),
+        )
+
+    monkeypatch.setattr(server.threading, "Thread", ImmediateThread)
+    monkeypatch.setattr(server, "_reserved_project_for_chat", lambda ctx, chat_id: {})
+    monkeypatch.setattr(server, "_addressable_root_tasks", lambda ctx, _pid: [])
+    monkeypatch.setattr(
+        server, "_decision_turn_metadata", lambda ctx, chat_id, cmid, md: md
+    )
+    monkeypatch.setattr(
+        server,
+        "_record_routing_receipt",
+        lambda bridge, ctx, **kw: receipts.append(kw),
+    )
+    monkeypatch.setattr(
+        ouroboros.projects_registry, "list_projects", lambda _root: []
+    )
+
+    # Negative arm: each known machine channel must refuse, never mint a root.
+    for channel in ("api_command", "api_task", "cli"):
+        direct_calls.clear()
+        receipts.clear()
+        server._route_owner_message(
+            SimpleNamespace(),
+            make_ctx(),
+            {
+                "chat_id": 1,
+                "text": "machine-origin frame",
+                "client_message_id": f"m-{channel}",
+                "log_text": "machine-origin frame",
+                "origin_message_ref": {
+                    "chat_id": 1,
+                    "client_message_id": f"m-{channel}",
+                },
+                "task_metadata": {"client_surface": {"channel": channel}},
+            },
+        )
+        assert direct_calls == [], (
+            f"machine channel {channel!r} reached the decision lane — a root "
+            "would have been minted from a non-owner surface"
+        )
+        assert any(r.get("action") == "root_mint_refused" for r in receipts), (
+            f"machine channel {channel!r} was refused without a typed "
+            "root_mint_refused receipt"
+        )
+
+    # Positive arm: genuine owner text (source == "web", designed absence of
+    # channel) DOES reach the decision lane and fires no refusal.
+    direct_calls.clear()
+    receipts.clear()
+    server._route_owner_message(
+        SimpleNamespace(),
+        make_ctx(),
+        {
+            "chat_id": 1,
+            "text": "owner typed this",
+            "client_message_id": "m-owner",
+            "log_text": "owner typed this",
+            "origin_message_ref": {"chat_id": 1, "client_message_id": "m-owner"},
+            "task_metadata": {},
+        },
+    )
+    assert direct_calls, "owner web text did not reach the decision lane"
+    assert receipts == [], "owner web text fired a refusal receipt"

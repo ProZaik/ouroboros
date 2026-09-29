@@ -144,3 +144,36 @@ def noted_owner_text(owner_ctx: Any, entry: Dict[str, Any], text: str) -> str:
     """The injected mailbox text plus its surface note when one is due."""
     note = owner_surface_note(owner_ctx, entry.get("client_surface"))
     return text + note if note else text
+
+
+# ---------------------------------------------------------------------------
+# Reader half of the phantom-root-task class (ibl-b4000f69c33c)
+# ---------------------------------------------------------------------------
+
+# Channels the codebase's own machine producers stamp, each precisely so its
+# frames cannot masquerade as owner text: the CLI/SPA command endpoint
+# (gateway/control.py -> "api_command"), the external task-admission endpoint
+# (gateway/tasks.py -> "api_task"), and the CLI ("cli"). A producer that
+# stamps one of these has named itself NON-owner.
+MACHINE_SURFACE_CHANNELS = frozenset({"api_command", "api_task", "cli"})
+
+
+def non_owner_surface_channel(fact: Any) -> str:
+    """The machine channel named by an Owner Surface Fact, or "" (owner path).
+
+    A message whose surface channel is an explicitly present, known machine
+    channel must not mint a root task as though the owner typed it. Absence of
+    the channel is the owner default (``source == "web"`` is a designed absence
+    — an old SPA sends no fact) and mints as before; a channel this predicate
+    does not recognize is likewise the owner default (a transport that carries
+    owner text stamps its own source and must still mint). The refusal triggers
+    ONLY on an explicitly present machine channel, so this is not an open
+    default behind a closed exception list (DEVELOPMENT anti-pattern). Keyed
+    ONLY on the typed channel value; message text is never consulted (BIBLE P5).
+    """
+    if not isinstance(fact, dict):
+        return ""
+    channel = fact.get("channel")
+    if isinstance(channel, str) and channel in MACHINE_SURFACE_CHANNELS:
+        return channel
+    return ""

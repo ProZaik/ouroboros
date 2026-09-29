@@ -563,6 +563,28 @@ def _route_owner_message(bridge: Any, ctx: Any, incoming: Dict[str, Any]) -> Non
         and not isinstance(task_metadata.get("client_surface"), dict)
     ):
         task_metadata = {**task_metadata, "client_surface": {"channel": _ingress_source}}
+    # Reader half of the phantom-root-task class (ibl-b4000f69c33c): a message
+    # whose surface channel is an explicitly present, KNOWN machine channel
+    # (the CLI/SPA command endpoint, the external task-admission endpoint, the
+    # CLI) has named itself non-owner — it must not mint a root task as though
+    # the owner typed it. Absence of the channel is the owner default and mints
+    # as before. Keyed ONLY on the typed channel value; message text is never
+    # consulted (BIBLE P5 — no "[1/4]"-prefix or any prose classifier).
+    from ouroboros.client_surface import non_owner_surface_channel as _non_owner_channel
+
+    _refused_channel = _non_owner_channel(task_metadata.get("client_surface"))
+    if _refused_channel:
+        _record_routing_receipt(
+            bridge,
+            ctx,
+            chat_id=chat_id,
+            client_message_id=client_message_id,
+            action="root_mint_refused",
+            target="",
+            status="refused",
+            reason=f"non_owner_surface_channel:{_refused_channel}",
+        )
+        return
     if task_metadata.get("force_plan"):
         from supervisor.worker_chat_lane import owner_conversation_admitted
         from supervisor.state import budget_remaining, load_state
