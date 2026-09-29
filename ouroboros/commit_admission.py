@@ -55,17 +55,33 @@ def auto_sync_release_metadata_if_needed(
     drive_root: pathlib.Path,
     paths: list[str] | None,
 ) -> list[str]:
-    """Sync VERSION-derived carriers before admission snapshot hashing."""
+    """Sync VERSION-derived carriers and surface every modified carrier.
+
+    Returns the union of carriers rewritten by ``sync_release_metadata`` and
+    carriers modified vs HEAD that the caller's ``paths`` filter would have
+    excluded, so ``_stage_candidate_for_review`` stages them all. Without the
+    union a caller-supplied ``paths`` list silently narrows staging away from a
+    carrier that is coherent on disk yet modified vs HEAD, landing a
+    version-bearing commit whose HEAD tree is desynced (BIBLE P9).
+    """
     selected = set(str(p) for p in (paths or []) if str(p).strip())
     touched = set(changed_worktree_paths(repo_dir))
     if "VERSION" not in selected and "VERSION" not in touched:
         return []
     try:
-        from ouroboros.tools.release_sync import sync_release_metadata
+        from ouroboros.tools.release_sync import (
+            CARRIER_SPAN_PATHS,
+            sync_release_metadata,
+        )
         changed = list(sync_release_metadata(str(repo_dir)) or [])
-        if changed:
+        # A carrier modified vs HEAD but already coherent is never returned by
+        # sync_release_metadata (it rewrote nothing), yet it MUST be staged in a
+        # version-bearing commit or HEAD lands desynced. Surface it here so the
+        # staging union in _stage_candidate_for_review picks it up.
+        staged = sorted(set(changed) | (touched & CARRIER_SPAN_PATHS))
+        if staged:
             subprocess.run(
-                ["git", "add", "--", *changed],
+                ["git", "add", "--", *staged],
                 cwd=str(repo_dir),
                 capture_output=True,
                 text=True,
@@ -75,10 +91,10 @@ def auto_sync_release_metadata_if_needed(
             append_jsonl(drive_root / "logs" / "events.jsonl", {
                 "ts": utc_now_iso(),
                 "type": "release_metadata_auto_synced",
-                "changed_files": changed,
+                "changed_files": staged,
                 "task_id": str(getattr(ctx, "task_id", "") or ""),
             })
-        return changed
+        return staged
     except Exception as exc:
         log.debug("release metadata auto-sync failed (non-fatal): %s", exc, exc_info=True)
         return []
