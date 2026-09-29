@@ -55,7 +55,21 @@ def _evolution_restart_block_reason(ctx: ToolContext) -> str:
     if not reviewed_sha:
         return "commit_reviewed has not recorded an exact local commit receipt"
     if reviewed_sha and reviewed_sha != head:
-        return "HEAD changed after the last reviewed local commit"
+        is_ancestor = False
+        try:
+            run_cmd(["git", "merge-base", "--is-ancestor", reviewed_sha, head], cwd=ctx.repo_dir)
+            is_ancestor = True
+        except Exception:
+            is_ancestor = False
+        if is_ancestor:
+            return (
+                f"HEAD ({head[:9]}) moved forward since reviewed commit ({reviewed_sha[:9]}), "
+                "which survives as an ancestor; re-run commit_reviewed or reconcile to restart"
+            )
+        return (
+            f"HEAD changed after the last reviewed local commit (reviewed: {reviewed_sha[:9]}, current: {head[:9]}); "
+            "reviewed commit is not an ancestor of current HEAD"
+        )
     return "commit_reviewed must create a local reviewed commit before evolution restart"
 
 

@@ -54,6 +54,49 @@ def test_restart_requires_the_exact_active_commit_receipt(tmp_path, monkeypatch)
     assert "owner_stopped" in control._evolution_restart_block_reason(ctx)
 
 
+def test_evolution_restart_distinguishes_ancestor_commit_from_divergent_head(tmp_path, monkeypatch):
+    """Fulfills ibl-d628fc0a88a8:
+    Verify restart guard distinguishes 'my reviewed commit is an ancestor of current HEAD'
+    (safe to reconcile/restart) from 'my reviewed commit was superseded/divergent' (blocked).
+    """
+    from types import SimpleNamespace
+    from ouroboros.tools import control_runtime as control
+
+    # Scenario 1: reviewed commit is an ancestor of current HEAD
+    def fake_run_cmd_ancestor(cmd, cwd=None):
+        if cmd[:2] == ["git", "status"]:
+            return ""
+        if cmd[:2] == ["git", "rev-parse"]:
+            return "head_sha_9876543210"
+        if cmd[:3] == ["git", "merge-base", "--is-ancestor"]:
+            return ""
+        raise RuntimeError("unexpected command: " + str(cmd))
+
+    monkeypatch.setattr(control, "run_cmd", fake_run_cmd_ancestor)
+    ctx = SimpleNamespace(
+        current_task_type="evolution",
+        repo_dir=tmp_path,
+        last_reviewed_commit_sha="reviewed_sha_1234567890",
+    )
+    msg = control._evolution_restart_block_reason(ctx)
+    assert "survives as an ancestor" in msg
+    assert "re-run commit_reviewed or reconcile to restart" in msg
+
+    # Scenario 2: reviewed commit is NOT an ancestor of current HEAD
+    def fake_run_cmd_divergent(cmd, cwd=None):
+        if cmd[:2] == ["git", "status"]:
+            return ""
+        if cmd[:2] == ["git", "rev-parse"]:
+            return "head_sha_9876543210"
+        if cmd[:3] == ["git", "merge-base", "--is-ancestor"]:
+            raise RuntimeError("not an ancestor")
+        raise RuntimeError("unexpected command: " + str(cmd))
+
+    monkeypatch.setattr(control, "run_cmd", fake_run_cmd_divergent)
+    msg_divergent = control._evolution_restart_block_reason(ctx)
+    assert "reviewed commit is not an ancestor of current HEAD" in msg_divergent
+
+
 def test_boot_restart_verifies_exact_v2_claim_only_after_new_generation(
     tmp_path, monkeypatch,
 ):
