@@ -115,3 +115,66 @@ def test_carrier_span_paths_is_the_union_authority(tmp_path, monkeypatch):
     """README.md and VERSION are the carrier names this contract depends on."""
     assert "README.md" in release_sync.CARRIER_SPAN_PATHS
     assert "VERSION" in release_sync.CARRIER_SPAN_PATHS
+
+
+def test_stage_candidate_for_review_unions_synced_release_carriers(tmp_path, monkeypatch):
+    """Fulfills ibl-206cfe1a121f and ibl-a345da4da977.
+
+    Verifies that _stage_candidate_for_review exercises the real consumer seam:
+    paths = sorted(set(paths) | set(synced)), passing the united paths to `git add`.
+    Also asserts that the fake run_cmd returns string (not SimpleNamespace) so that
+    status.strip() works as required by real consumer.
+    """
+    import time
+    from ouroboros.tools import git_review_cycle
+
+    ctx = types.SimpleNamespace(
+        task_id="pin-consumer-union",
+        repo_dir=str(tmp_path),
+        drive_root=str(tmp_path),
+        _review_resume_pending=False,
+    )
+
+    monkeypatch.setattr(
+        "ouroboros.commit_admission.auto_sync_release_metadata_if_needed",
+        lambda _ctx, _repo, _drive, _paths: ["README.md"],
+    )
+
+    executed_cmds = []
+
+    class FakeGit:
+        def safe_relpath(self, path):
+            return str(path)
+
+        def run_cmd(self, cmd, cwd=None):
+            executed_cmds.append(cmd)
+            if "status" in cmd:
+                return "M  VERSION\nM  README.md\n"
+            if "--name-status" in cmd:
+                return "M\tVERSION\nM\tREADME.md\n"
+            return ""
+
+        def paths_from_name_status(self, raw):
+            return ["README.md", "VERSION"]
+
+    monkeypatch.setattr(git_review_cycle, "_git", lambda: FakeGit())
+
+    classification, advisory, error = git_review_cycle._stage_candidate_for_review(
+        ctx,
+        commit_message="test union",
+        commit_start=time.time(),
+        paths=["VERSION"],
+        came_from_detached_checkout=False,
+    )
+
+    assert error is None
+    assert classification == ["README.md", "VERSION"]
+    assert advisory == ["README.md", "VERSION"]
+
+    add_calls = [cmd for cmd in executed_cmds if cmd and cmd[0] == "git" and cmd[1] == "add"]
+    assert add_calls, "Expected at least one git add call"
+    added_args = add_calls[0][2:]
+    assert "README.md" in added_args
+    assert "VERSION" in added_args
+    assert added_args == ["README.md", "VERSION"]
+

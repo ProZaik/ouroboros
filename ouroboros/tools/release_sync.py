@@ -849,12 +849,34 @@ def bump_version(
                 new_lines = lines[:table_start] + kept_rows + lines[table_end:]
                 new_text = "\n".join(new_lines) + ("\n" if readme_text.endswith("\n") else "")
 
-                if rolled_off:
-                    roll_marker = "Older releases are preserved in this repository's history. Rows "
-                    if roll_marker in new_text:
-                        pos = new_text.find(roll_marker) + len(roll_marker)
-                        roll_str = ", ".join(rolled_off) + ", "
-                        new_text = new_text[:pos] + roll_str + new_text[pos:]
+                roll_marker = "Older releases are preserved in this repository's history. Rows "
+                if roll_marker in new_text:
+                    pos = new_text.find(roll_marker) + len(roll_marker)
+                    end_marker = " were rolled off in this release."
+                    end_pos = new_text.find(end_marker, pos)
+                    if end_pos != -1:
+                        old_marker_body = new_text[pos:end_pos]
+                        existing_versions = re.findall(r"\b\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?\b", old_marker_body)
+
+                        kept_versions = set()
+                        for r in kept_rows:
+                            m_v = _VERSION_ROW_RE.match(r)
+                            if m_v:
+                                kept_versions.add(f"{m_v.group(1)}.{m_v.group(2)}.{m_v.group(3)}")
+
+                        all_rolled = []
+                        for v in rolled_off + existing_versions:
+                            if v not in kept_versions and v not in all_rolled:
+                                all_rolled.append(v)
+
+                        if len(all_rolled) > 1:
+                            new_roll_str = ", ".join(all_rolled[:-1]) + " and " + all_rolled[-1]
+                        elif all_rolled:
+                            new_roll_str = all_rolled[0]
+                        else:
+                            new_roll_str = ""
+
+                        new_text = new_text[:pos] + new_roll_str + new_text[end_pos:]
 
                 readme_file.write_text(new_text, encoding="utf-8")
 

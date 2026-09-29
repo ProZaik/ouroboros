@@ -854,3 +854,52 @@ class TestReadmeVersionHistoryCarrier:
         # the carrier check must stay silent so unrelated desync probes work.
         desync = version_carrier_desyncs("7.5.0", detailed=True)
         assert not any("Version History" in d for d in desync)
+
+    def test_rolloff_marker_recomputation_and_deduplication(self, tmp_path):
+        """Fulfills ibl-73d0ffad7575: roll-off marker is recomputed cleanly without duplicating versions."""
+        from ouroboros.tools.release_sync import bump_version
+
+        repo = _make_repo(tmp_path, version="7.4.30")
+        readme = (
+            "# Ouroboros\n\n"
+            "[![Version 7.4.30](https://img.shields.io/badge/version-7.4.30-green.svg)](VERSION)\n\n"
+            "## Version History\n\n"
+            "| Version | Date | Description |\n"
+            "|---------|------|-------------|\n"
+            "| 7.4.30 | 2026-09-28 | patch 30 |\n"
+            "| 7.4.29 | 2026-09-28 | patch 29 |\n"
+            "| 7.4.28 | 2026-09-28 | patch 28 |\n"
+            "| 7.4.27 | 2026-09-28 | patch 27 |\n"
+            "| 7.4.26 | 2026-09-28 | patch 26 |\n"
+            "\n"
+            "Older releases are preserved in this repository's history. Rows 7.4.25, 7.4.24 and 7.4.23 were rolled off in this release.\n"
+        )
+        (repo / "README.md").write_text(readme, encoding="utf-8")
+
+        # Bump to 7.4.31: should keep 7.4.31, 7.4.30, 7.4.29, 7.4.28, 7.4.27 (5 patches)
+        # 7.4.26 should roll off cleanly into the marker
+        bump_version(repo, "7.4.31", "patch 31", "2026-09-29")
+
+        updated = (repo / "README.md").read_text(encoding="utf-8")
+        assert "| 7.4.31 |" in updated
+        assert "| 7.4.26 |" not in updated
+        assert "Rows 7.4.26, 7.4.25, 7.4.24 and 7.4.23 were rolled off in this release." in updated
+
+    def test_real_readme_has_no_overlap_between_live_rows_and_rolloff(self):
+        """Fulfills ibl-73d0ffad7575: assert no version named in roll-off marker is also in live table rows."""
+        import re
+        real_readme = Path(__file__).resolve().parent.parent / "README.md"
+        assert real_readme.is_file()
+        text = real_readme.read_text(encoding="utf-8")
+
+        live_versions = set()
+        for m in re.finditer(r"^\|\s*(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\s*\|", text, re.MULTILINE):
+            live_versions.add(m.group(1))
+
+        m_roll = re.search(r"Older releases are preserved in this repository's history\.\s*Rows\s+(.*?)\s+were rolled off", text)
+        if m_roll:
+            rolled_str = m_roll.group(1)
+            rolled_versions = set(re.findall(r"\b\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?\b", rolled_str))
+            overlap = live_versions & rolled_versions
+            assert not overlap, f"Versions in both live table and roll-off marker: {sorted(overlap)}"
+

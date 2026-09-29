@@ -264,6 +264,18 @@ def test_crux_directive_mandates_symbol_and_wiring_after_already_exists():
     assert "name the found symbol and its exact location" in content
 
 
+def test_crux_directive_mandates_reading_a_fake_consumer_type_contract():
+    """A stub/fake must match the consumer's expected return TYPE, not just shape."""
+    from ouroboros.loop_nudges import _maybe_inject_evolution_crux_directive
+
+    messages: list = [{"role": "user", "content": "obj"}]
+    accumulated: dict = {}
+    _maybe_inject_evolution_crux_directive(1, messages, accumulated, task_type="evolution")
+    content = "\n".join(str(m.get("content") or "") for m in messages)
+    assert "read that consumer's call site first" in content
+    assert "return the TYPE the consumer actually consumes" in content
+
+
 def test_crux_directive_initializes_decision_step():
     """ibl-eacad98b3b83 (A4): crux directive registers initial undecided EvolutionDecisionStep."""
     from ouroboros.loop_nudges import (
